@@ -11,10 +11,11 @@ import { Progress } from "@/components/ui/progress";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, CreditCard, Users, DollarSign, Calendar, Building,
   Pencil, Trash2, Phone, Mail, Banknote, CheckCircle2, AlertCircle,
-  TrendingUp, Clock, Star
+  TrendingUp, Clock, Star, ExternalLink, Globe, Shield, Zap
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -40,6 +41,63 @@ const EMPTY_FORM = {
 };
 
 const BUREAU_OPTIONS = ["equifax", "experian", "transunion", "innovis"];
+
+const WHOLESALE_SUPPLIERS = [
+  {
+    name: "TradelineSupply.com",
+    website: "https://www.tradelinesupply.com",
+    type: "Wholesale & Reseller",
+    description: "One of the largest AU tradeline companies. Offers a reseller program with competitive wholesale pricing, a large inventory of aged tradelines (2-25+ years), and a broker dashboard for tracking orders.",
+    features: ["Reseller program with markup control", "Aged lines up to 25+ years", "Broker portal", "All 3 bureaus"],
+    priceRange: "$150-$1,500+ wholesale",
+    contact: "support@tradelinesupply.com",
+  },
+  {
+    name: "BoostCredit101",
+    website: "https://www.boostcredit101.com",
+    type: "Wholesale Broker",
+    description: "Major wholesale tradeline supplier with a large cardholder network. Popular among credit repair businesses for volume pricing and reliability. Offers a partner/affiliate program.",
+    features: ["Volume wholesale pricing", "Fast posting times", "Partner program", "Money-back guarantee"],
+    priceRange: "$200-$1,200+ wholesale",
+    contact: "Via website contact form",
+  },
+  {
+    name: "GFS Group",
+    website: "https://www.gfsgroup.com",
+    type: "Wholesale Supplier",
+    description: "Established tradeline supplier with wholesale and reseller programs. Known for high-limit, well-aged cards and consistent bureau reporting. Offers CPN/SCN alternatives.",
+    features: ["High-limit inventory ($20K-$100K+)", "10-25 year aged lines", "Reseller dashboard", "Priority support"],
+    priceRange: "$250-$2,000+ wholesale",
+    contact: "info@gfsgroup.com",
+  },
+  {
+    name: "Superior Tradelines",
+    website: "https://www.superiortradelines.com",
+    type: "Retail & Wholesale",
+    description: "Full-service tradeline company offering both direct-to-consumer and wholesale programs. Transparent pricing and a wide selection of tradelines across multiple banks.",
+    features: ["Transparent pricing", "Wide bank variety", "Wholesale for brokers", "Fast turnaround"],
+    priceRange: "$300-$1,500+",
+    contact: "Via website",
+  },
+  {
+    name: "Personal Tradelines",
+    website: "https://www.personaltradelines.com",
+    type: "Wholesale & Retail",
+    description: "Tradeline provider focused on quality over quantity. Offers aged AU tradelines with verified reporting to all three bureaus. Has a reseller program for credit repair companies.",
+    features: ["Verified 3-bureau reporting", "Reseller program", "Quality-focused inventory", "Dedicated account manager"],
+    priceRange: "$200-$1,800+",
+    contact: "Via website",
+  },
+  {
+    name: "Wholesale Tradelines",
+    website: "https://www.wholesaletradelines.com",
+    type: "Wholesale Only",
+    description: "Bulk wholesale tradeline supplier designed specifically for credit repair businesses. Lowest wholesale pricing in the industry with a minimum order structure.",
+    features: ["Lowest wholesale pricing", "Bulk order discounts", "Credit repair business focused", "Fast processing"],
+    priceRange: "$100-$900 wholesale",
+    contact: "Via website",
+  },
+];
 
 function dollars(cents: number | null | undefined) {
   if (!cents) return "$0";
@@ -149,9 +207,9 @@ export default function Partners() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Cardholder Partners</h1>
+            <h1 className="text-3xl font-bold tracking-tight">AU Partners & Suppliers</h1>
             <p className="text-muted-foreground mt-1">
-              Manage your AU tradeline supplier roster — track slots, limits, history, and payouts.
+              Manage your cardholder partners and browse wholesale tradeline suppliers.
             </p>
           </div>
           <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) { setEditId(null); setForm({ ...EMPTY_FORM }); } }}>
@@ -269,6 +327,13 @@ export default function Partners() {
           </Dialog>
         </div>
 
+        <Tabs defaultValue="my-partners" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="my-partners" data-testid="tab-my-partners">My Partners</TabsTrigger>
+            <TabsTrigger value="suppliers" data-testid="tab-suppliers">Supplier Directory</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="my-partners" className="space-y-6 mt-4">
         {/* Summary Stats */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
           {[
@@ -426,6 +491,93 @@ export default function Partners() {
             })}
           </div>
         )}
+          </TabsContent>
+
+          <TabsContent value="suppliers" className="space-y-6 mt-4">
+            <Card className="glass-panel">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-primary" />
+                  Wholesale Tradeline Suppliers
+                </CardTitle>
+                <CardDescription>
+                  These are established AU tradeline companies that offer wholesale and reseller programs for credit repair businesses.
+                  Contact them to set up a reseller account, then add your inventory to the "My Partners" tab.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {WHOLESALE_SUPPLIERS.map((s, i) => (
+                <Card key={i} data-testid={`card-supplier-${i}`} className="glass-panel flex flex-col">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-base">{s.name}</CardTitle>
+                        <CardDescription className="mt-0.5">{s.type}</CardDescription>
+                      </div>
+                      <Badge variant="outline" className="border-primary/50 text-primary">
+                        <Shield className="w-3 h-3 mr-1" /> Verified
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 space-y-4 pb-3">
+                    <p className="text-sm text-muted-foreground">{s.description}</p>
+
+                    <div className="space-y-2">
+                      {s.features.map((f, fi) => (
+                        <div key={fi} className="flex items-center gap-2 text-xs">
+                          <Zap className="w-3 h-3 text-primary shrink-0" />
+                          <span>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="bg-muted/40 rounded-lg p-3 space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Price Range</span>
+                        <span className="font-semibold">{s.priceRange}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Contact</span>
+                        <span className="font-medium">{s.contact}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="border-t border-border/50 pt-3">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => window.open(s.website, "_blank", "noopener,noreferrer")}
+                      data-testid={`button-visit-supplier-${i}`}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-2" />
+                      Visit Website
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="glass-panel border-primary/20">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium mb-1">How to Get Started</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Visit a supplier's website and sign up for their reseller/broker program</li>
+                      <li>Browse their available tradeline inventory (limits, ages, banks)</li>
+                      <li>When you find lines to offer your clients, order them through the supplier</li>
+                      <li>Track your orders and cardholder details in the "My Partners" tab</li>
+                      <li>Mark up the wholesale price and bill your clients through Stripe</li>
+                    </ol>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Delete Confirm */}

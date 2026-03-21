@@ -21,7 +21,7 @@ export default function Landing() {
             <a href="#contact" className="hover:text-white transition-colors">Contact</a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link href="/dashboard">
+            <Link href="/login">
               <Button variant="ghost" className="text-white/70 hover:text-white border border-white/10 hover:border-white/30">
                 Staff Login
               </Button>
@@ -321,7 +321,7 @@ export default function Landing() {
             <span>·</span>
             <span>Terms</span>
             <span>·</span>
-            <Link href="/dashboard" className="text-blue-500 hover:text-blue-400">Staff Login</Link>
+            <Link href="/login" className="text-blue-500 hover:text-blue-400">Staff Login</Link>
           </div>
         </div>
       </footer>

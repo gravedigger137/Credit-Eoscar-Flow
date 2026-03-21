@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import Stripe from "stripe";
 import { storage } from "./storage";
 import {
   insertClientSchema, insertDisputeSchema, insertCreditReportSchema,
@@ -9,6 +10,12 @@ import {
 import { buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES } from "./metro2";
 import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record } from "./ai";
 import { ZodError } from "zod";
+
+function getStripe(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  return new Stripe(key, { apiVersion: "2024-06-20" as any });
+}
 
 function handleError(res: Response, err: unknown) {
   if (err instanceof ZodError) {
@@ -263,30 +270,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── STRIPE WEBHOOK ────────────────────────────────────────────────────────
   app.post("/api/stripe/webhook", async (req, res) => {
-    const stripeSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    if (!stripeSecret) {
-      return res.status(400).json({ message: "Stripe webhook secret not configured" });
+    const stripe = getStripe();
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!stripe || !webhookSecret) {
+      return res.status(400).json({ message: "Stripe webhook not configured" });
     }
     try {
-      const event = req.body;
-      if (event.type === "payment_intent.succeeded") {
-        const pi = event.data.object;
+      const sig = req.headers["stripe-signature"] as string;
+      const event = stripe.webhooks.constructEvent(req.rawBody as string | Buffer, sig, webhookSecret);
+
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const piId = session.payment_intent as string;
+        const clientId = session.metadata?.clientId || undefined;
         await storage.createTransaction({
-          stripePaymentIntentId: pi.id,
-          type: "payment",
-          description: `Stripe payment ${pi.id}`,
-          amount: pi.amount,
+          clientId: clientId || null,
+          stripePaymentIntentId: piId || null,
+          type: session.metadata?.type || "payment",
+          description: session.metadata?.description || `Stripe checkout ${session.id}`,
+          amount: session.amount_total || 0,
           status: "completed",
           paidAt: new Date(),
         });
         await storage.createNotification({
           type: "billing",
           title: "Payment Received",
-          message: `Payment of $${(pi.amount / 100).toFixed(2)} received via Stripe.`,
+          message: `Payment of $${((session.amount_total || 0) / 100).toFixed(2)} received via Stripe checkout.`,
           read: false,
         });
       } else if (event.type === "payment_intent.payment_failed") {
-        const pi = event.data.object;
+        const pi = event.data.object as Stripe.PaymentIntent;
         await storage.createNotification({
           type: "warning",
           title: "Payment Failed",
@@ -295,22 +308,76 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
       res.json({ received: true });
+    } catch (err: any) {
+      console.error("Stripe webhook error:", err.message);
+      res.status(400).json({ message: `Webhook error: ${err.message}` });
+    }
+  });
+
+  // ─── STRIPE CHECKOUT SESSION ────────────────────────────────────────────────
+  app.post("/api/stripe/create-checkout", async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) {
+      return res.status(400).json({ message: "Add STRIPE_SECRET_KEY to your environment secrets to enable payments." });
+    }
+    try {
+      const { amount, description, clientId, type } = req.body;
+      if (!amount || amount < 50) {
+        return res.status(400).json({ message: "Amount must be at least $0.50 (50 cents)." });
+      }
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] || "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: description || "CreditRepair Pro Service" },
+            unit_amount: amount,
+          },
+          quantity: 1,
+        }],
+        metadata: { clientId: clientId || "", type: type || "payment", description: description || "" },
+        success_url: `${baseUrl}/billing?payment=success`,
+        cancel_url: `${baseUrl}/billing?payment=cancelled`,
+      });
+
+      res.json({ url: session.url, sessionId: session.id });
     } catch (err) { handleError(res, err); }
   });
 
-  // ─── STRIPE PAYMENT LINK ───────────────────────────────────────────────────
+  // ─── STRIPE PAYMENT LINK (backward compat) ─────────────────────────────────
   app.post("/api/stripe/create-payment-link", async (req, res) => {
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
-    if (!stripeKey) {
-      return res.status(400).json({ message: "Stripe secret key not configured. Add STRIPE_SECRET_KEY to your environment secrets." });
+    const stripe = getStripe();
+    if (!stripe) {
+      return res.status(400).json({ message: "Add STRIPE_SECRET_KEY to your environment secrets to enable payments." });
     }
     try {
-      const { amount, description, clientId } = req.body;
-      // Return a placeholder payment URL since Stripe requires live keys
-      res.json({
-        url: `https://checkout.stripe.com/pay/placeholder`,
-        message: "Configure STRIPE_SECRET_KEY to enable live payment links.",
+      const { amount, description, clientId, type } = req.body;
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] || "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            product_data: { name: description || "CreditRepair Pro Service" },
+            unit_amount: amount || 9900,
+          },
+          quantity: 1,
+        }],
+        metadata: { clientId: clientId || "", type: type || "payment", description: description || "" },
+        success_url: `${baseUrl}/billing?payment=success`,
+        cancel_url: `${baseUrl}/billing?payment=cancelled`,
       });
+
+      res.json({ url: session.url, sessionId: session.id });
     } catch (err) { handleError(res, err); }
   });
 

@@ -1,10 +1,11 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database, Sparkles } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database, Sparkles, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -74,6 +75,18 @@ export function AppSidebar() {
 }
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const initials = user?.fullName
+    ? user.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.username?.slice(0, 2).toUpperCase() || "??";
+
+  async function handleLogout() {
+    await logout();
+    setLocation("/login");
+  }
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background/95">
@@ -96,8 +109,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive border border-background"></span>
                 </Button>
               </Link>
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm">
-                JD
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm" data-testid="text-user-avatar">
+                  {initials}
+                </div>
+                <span className="hidden md:inline text-sm text-muted-foreground" data-testid="text-username">
+                  {user?.fullName || user?.username}
+                </span>
+                <Button variant="ghost" size="icon" onClick={handleLogout} title="Sign out" data-testid="button-logout">
+                  <LogOut className="w-4 h-4" />
+                </Button>
               </div>
             </div>
           </header>

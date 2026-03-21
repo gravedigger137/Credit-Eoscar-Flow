@@ -415,6 +415,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── API CONFIGS (admin only) ───────────────────────────────────────────────
+  app.get("/api/admin-overrides", async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session!.userId!);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const keys = [
+        "admin_bypass_partner_access", "admin_bypass_dispute_approval",
+        "admin_bypass_tradeline_limits", "admin_bypass_billing_holds",
+        "admin_bypass_credit_builder_enrollment", "admin_bypass_compliance_checks",
+        "admin_bypass_metro2_validation", "admin_bypass_staff_restrictions",
+        "admin_auto_import_reports", "admin_auto_assign_tradelines",
+      ];
+      const results: Record<string, boolean> = {};
+      for (const k of keys) {
+        const val = await storage.getApiConfig(k);
+        results[k] = val === "true";
+      }
+      res.json(results);
+    } catch (err) { handleError(res, err); }
+  });
+
   app.get("/api/config/:key", async (req, res) => {
     try {
       const user = await storage.getUser(req.session!.userId!);

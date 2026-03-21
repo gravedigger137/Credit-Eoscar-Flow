@@ -69,6 +69,7 @@ export const disputes = pgTable("disputes", {
   accountNumber: text("account_number"),
   reason: text("reason").notNull(),
   itemType: text("item_type"),
+  disputeType: text("dispute_type").default("general"),
   disputeMethod: text("dispute_method").default("mail"),
   trackingNumber: text("tracking_number"),
   status: disputeStatusEnum("status").notNull().default("preparing"),

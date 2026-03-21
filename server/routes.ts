@@ -9,6 +9,7 @@ import {
 } from "@shared/schema";
 import { buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES } from "./metro2";
 import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record } from "./ai";
+import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
 
 function getStripe(): Stripe | null {
@@ -136,6 +137,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       await storage.deleteDispute(req.params.id);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/dispute-reasons", (_req, res) => {
+    res.json(DISPUTE_REASONS);
+  });
+
+  app.post("/api/disputes/:id/generate-letter", async (req, res) => {
+    try {
+      const dispute = await storage.getDispute(req.params.id);
+      if (!dispute) return res.status(404).json({ message: "Dispute not found" });
+
+      const client = await storage.getClient(dispute.clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const disputeType = (req.body.disputeType || "general") as DisputeType;
+
+      const letter = generateFCRADisputeLetter({
+        clientName: `${client.firstName}${client.middleName ? " " + client.middleName : ""} ${client.lastName}${client.suffix ? " " + client.suffix : ""}`,
+        clientAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ") || undefined,
+        clientSSNLast4: client.ssn ? client.ssn.slice(-4) : undefined,
+        clientDOB: client.dob || undefined,
+        bureau: dispute.bureau,
+        accountName: dispute.accountName,
+        accountNumber: dispute.accountNumber || undefined,
+        reason: dispute.reason,
+        disputeType,
+      });
+
+      await storage.updateDispute(req.params.id, {
+        letterContent: letter,
+        disputeType,
+      });
+
+      res.json({ letter, disputeId: dispute.id });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/disputes/generate-letter-preview", async (req, res) => {
+    try {
+      const { clientId, bureau, accountName, accountNumber, reason, disputeType } = req.body;
+      if (!clientId || !bureau || !accountName || !reason) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const letter = generateFCRADisputeLetter({
+        clientName: `${client.firstName}${client.middleName ? " " + client.middleName : ""} ${client.lastName}${client.suffix ? " " + client.suffix : ""}`,
+        clientAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ") || undefined,
+        clientSSNLast4: client.ssn ? client.ssn.slice(-4) : undefined,
+        clientDOB: client.dob || undefined,
+        bureau,
+        accountName,
+        accountNumber: accountNumber || undefined,
+        reason,
+        disputeType: disputeType || "general",
+      });
+
+      res.json({ letter });
     } catch (err) { handleError(res, err); }
   });
 

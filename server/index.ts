@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -8,6 +9,8 @@ import { authRouter, requireAuth } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
+
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -27,10 +30,15 @@ app.use(express.urlencoded({ extended: false }));
 
 const PgStore = connectPgSimple(session);
 
+const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+if (!process.env.SESSION_SECRET) {
+  console.warn("WARNING: SESSION_SECRET not set — using auto-generated secret. Sessions will reset on restart.");
+}
+
 app.use(
   session({
     store: new PgStore({ conString: process.env.DATABASE_URL, createTableIfMissing: true }),
-    secret: process.env.SESSION_SECRET || "creditrepair-pro-secret-key-change-me",
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -56,19 +64,11 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      log(logLine);
+      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
     }
   });
 
@@ -84,6 +84,7 @@ app.use((req, res, next) => {
       req.path === "/auth/register" ||
       req.path === "/auth/logout" ||
       req.path === "/auth/me" ||
+      req.path === "/auth/has-users" ||
       req.path === "/stripe/webhook"
     ) {
       return next();

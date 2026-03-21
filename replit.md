@@ -16,12 +16,15 @@ A professional credit repair business management platform for credit repair agen
 
 ## Auth System
 
-- **Login page:** `/login` — sign in / register tabs, password hashing with bcrypt (12 rounds)
-- **Session:** express-session with PostgreSQL session store (7-day cookie)
-- **Protected routes:** All `/api/*` routes require authentication except `/api/auth/*` and `/api/stripe/webhook`
+- **First-user bootstrap:** When no users exist, `/login` shows a setup form that creates the first admin account. After that, registration is locked — only admins can create new staff accounts.
+- **Login page:** `/login` — bcrypt (12 rounds) password hashing, session regeneration on login (prevents session fixation)
+- **Session:** express-session with PostgreSQL session store (7-day cookie), `trust proxy` enabled for secure cookies behind TLS
+- **Rate limiting:** 10 login attempts per IP per 15-minute window
+- **Protected routes:** All `/api/*` routes require auth except `/api/auth/*` and `/api/stripe/webhook`
+- **Role-based access:** Config endpoints (`/api/config`) restricted to admin role only
 - **Frontend:** `AuthProvider` context wraps app, `ProtectedRoute` component redirects unauthenticated users to `/login`
-- **Logout:** Session destruction + redirect to `/login`
-- **Files:** `server/auth.ts` (auth routes + middleware), `client/src/hooks/use-auth.tsx` (context), `client/src/pages/login/index.tsx`
+- **Logout:** Session destruction + cookie clearing + redirect to `/login`
+- **Files:** `server/auth.ts` (auth routes + middleware + rate limiter), `client/src/hooks/use-auth.tsx` (context), `client/src/pages/login/index.tsx`
 
 ## Features
 

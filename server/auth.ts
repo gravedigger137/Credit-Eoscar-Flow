@@ -10,26 +10,68 @@ declare module "express-session" {
 
 export const authRouter = Router();
 
+const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 10;
+
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (!entry || now - entry.lastAttempt > RATE_LIMIT_WINDOW) {
+    loginAttempts.set(key, { count: 1, lastAttempt: now });
+    return true;
+  }
+  if (entry.count >= MAX_ATTEMPTS) return false;
+  entry.count++;
+  entry.lastAttempt = now;
+  return true;
+}
+
 authRouter.post("/api/auth/register", async (req: Request, res: Response) => {
   try {
-    const { username, password, fullName, email, phone, role } = req.body;
+    const { username, password, fullName, email, phone } = req.body;
     if (!username || !password) {
       return res.status(400).json({ message: "Username and password are required" });
     }
+    if (password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters" });
+    }
+
+    const allUsers = await storage.getUsers();
+    const isFirstUser = allUsers.length === 0;
+
+    if (!isFirstUser) {
+      if (!req.session.userId) {
+        return res.status(403).json({ message: "Registration is restricted. Contact your administrator." });
+      }
+      const currentUser = await storage.getUser(req.session.userId);
+      if (!currentUser || currentUser.role !== "admin") {
+        return res.status(403).json({ message: "Only administrators can create new staff accounts." });
+      }
+    }
+
     const existing = await storage.getUserByUsername(username);
     if (existing) {
       return res.status(409).json({ message: "Username already taken" });
     }
+
     const hashed = await bcrypt.hash(password, 12);
-    const user = await storage.createUser({ username, password: hashed, fullName, email, phone, role: role || "staff" });
-    req.session.regenerate((err) => {
-      if (err) return res.status(500).json({ message: "Session error" });
-      req.session.userId = user.id;
-      req.session.save(() => {
-        const { password: _, ...safe } = user;
-        res.status(201).json(safe);
+    const role = isFirstUser ? "admin" : "staff";
+    const user = await storage.createUser({ username, password: hashed, fullName, email, phone, role });
+
+    if (isFirstUser) {
+      req.session.regenerate((err) => {
+        if (err) return res.status(500).json({ message: "Session error" });
+        req.session.userId = user.id;
+        req.session.save(() => {
+          const { password: _, ...safe } = user;
+          res.status(201).json(safe);
+        });
       });
-    });
+    } else {
+      const { password: _, ...safe } = user;
+      res.status(201).json(safe);
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Registration failed" });
@@ -42,6 +84,12 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
     if (!username || !password) {
       return res.status(400).json({ message: "Username and password are required" });
     }
+
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (!checkRateLimit(`login:${ip}`)) {
+      return res.status(429).json({ message: "Too many login attempts. Try again in 15 minutes." });
+    }
+
     const user = await storage.getUserByUsername(username);
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
@@ -66,6 +114,7 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
 
 authRouter.post("/api/auth/logout", (req: Request, res: Response) => {
   req.session.destroy(() => {
+    res.clearCookie("connect.sid");
     res.json({ ok: true });
   });
 });
@@ -81,6 +130,15 @@ authRouter.get("/api/auth/me", async (req: Request, res: Response) => {
     res.json(safe);
   } catch {
     res.status(401).json({ message: "Not authenticated" });
+  }
+});
+
+authRouter.get("/api/auth/has-users", async (_req: Request, res: Response) => {
+  try {
+    const allUsers = await storage.getUsers();
+    res.json({ hasUsers: allUsers.length > 0 });
+  } catch {
+    res.json({ hasUsers: false });
   }
 });
 

@@ -322,12 +322,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     try {
       const { amount, description, clientId, type } = req.body;
-      if (!amount || amount < 50) {
-        return res.status(400).json({ message: "Amount must be at least $0.50 (50 cents)." });
+      if (!amount || typeof amount !== "number" || amount < 50) {
+        return res.status(400).json({ message: "Amount must be at least $0.50 (50 cents) as an integer." });
       }
-      const host = req.headers.host || "localhost:5000";
-      const protocol = req.headers["x-forwarded-proto"] || "http";
-      const baseUrl = `${protocol}://${host}`;
+      const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.headers.host || "localhost:5000";
+      const baseUrl = `https://${domain}`;
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -336,7 +335,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           price_data: {
             currency: "usd",
             product_data: { name: description || "CreditRepair Pro Service" },
-            unit_amount: amount,
+            unit_amount: Math.round(amount),
           },
           quantity: 1,
         }],
@@ -357,9 +356,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     try {
       const { amount, description, clientId, type } = req.body;
-      const host = req.headers.host || "localhost:5000";
-      const protocol = req.headers["x-forwarded-proto"] || "http";
-      const baseUrl = `${protocol}://${host}`;
+      const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.headers.host || "localhost:5000";
+      const baseUrl = `https://${domain}`;
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -368,7 +366,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           price_data: {
             currency: "usd",
             product_data: { name: description || "CreditRepair Pro Service" },
-            unit_amount: amount || 9900,
+            unit_amount: Math.round(amount || 9900),
           },
           quantity: 1,
         }],
@@ -416,9 +414,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  // ─── API CONFIGS ───────────────────────────────────────────────────────────
+  // ─── API CONFIGS (admin only) ───────────────────────────────────────────────
   app.get("/api/config/:key", async (req, res) => {
     try {
+      const user = await storage.getUser(req.session!.userId!);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
       const val = await storage.getApiConfig(req.params.key);
       res.json({ key: req.params.key, value: val ?? null });
     } catch (err) { handleError(res, err); }
@@ -426,6 +428,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/config", async (req, res) => {
     try {
+      const user = await storage.getUser(req.session!.userId!);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
       const { key, value } = req.body;
       if (!key || !value) return res.status(400).json({ message: "key and value required" });
       await storage.setApiConfig(key, value);
@@ -551,25 +557,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!client) return res.status(404).json({ message: "Client not found" });
 
       const record = {
+        client,
         accountNumber: accountNumber || `AU-${clientId.slice(0, 8)}`,
-        portfolioType: portfolioType || "R",
+        portfolioType: (portfolioType || "R") as "I" | "M" | "O" | "R",
         accountType: accountType || "18",
         dateOpened: dateOpened || new Date().toISOString().slice(0, 10),
+        dateOfAccountInfo: new Date().toISOString().slice(0, 10),
         creditLimit: creditLimit || 0,
         currentBalance: currentBalance || 0,
         accountStatus: accountStatus || "11",
-        paymentHistoryProfile: "CCCCCCCCCCCCCCCCCCCCCCC",
-        firstName: client.firstName,
-        lastName: client.lastName,
-        ssn: client.ssn || "",
-        dob: client.dateOfBirth || "",
-        address: client.address || "",
-        city: client.city || "",
-        state: client.state || "",
-        zip: client.zipCode || "",
+        paymentHistory: "111111111111111111111111",
         ecoaCode: ecoaCode || "3",
         companyId: companyId || "CRP001",
-        companyName: companyName || "CreditRepair Pro LLC",
+        reportType: (reportType || "M") as "M" | "C" | "D",
       };
 
       const fileContent = buildMetro2File(

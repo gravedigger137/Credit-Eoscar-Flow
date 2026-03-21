@@ -176,6 +176,56 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
 
+// ─── CARDHOLDER PARTNERS (AU Tradeline Suppliers) ────────────────────────────
+export const cardholderPartners = pgTable("cardholder_partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  paypalEmail: text("paypal_email"),
+  bankName: text("bank_name").notNull(),
+  cardName: text("card_name").notNull(),
+  creditLimit: integer("credit_limit").notNull(),
+  currentBalance: integer("current_balance").default(0),
+  historyYears: integer("history_years").notNull(),
+  reportingDay: integer("reporting_day"),
+  totalSlots: integer("total_slots").notNull().default(3),
+  usedSlots: integer("used_slots").notNull().default(0),
+  pricePerSlot: integer("price_per_slot"),
+  payoutPerSlot: integer("payout_per_slot"),
+  reportingBureaus: text("reporting_bureaus").array().default(sql`ARRAY['equifax','experian','transunion']::text[]`),
+  status: text("status").notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCardholderPartnerSchema = createInsertSchema(cardholderPartners).omit({ id: true, createdAt: true });
+export type InsertCardholderPartner = z.infer<typeof insertCardholderPartnerSchema>;
+export type CardholderPartner = typeof cardholderPartners.$inferSelect;
+
+// ─── METRO 2 SUBMISSION RECORDS ──────────────────────────────────────────────
+export const metro2Submissions = pgTable("metro2_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").references(() => clients.id, { onDelete: "set null" }),
+  bureau: text("bureau").notNull(),
+  reportType: text("report_type").notNull().default("M"),
+  accountNumber: text("account_number"),
+  portfolioType: text("portfolio_type").notNull(),
+  accountStatus: text("account_status").notNull().default("11"),
+  creditLimit: integer("credit_limit"),
+  currentBalance: integer("current_balance").default(0),
+  paymentHistory: text("payment_history").default("111111111111111111111111"),
+  ecoaCode: text("ecoa_code").notNull().default("3"),
+  fileContent: text("file_content"),
+  status: text("status").notNull().default("draft"),
+  submittedAt: timestamp("submitted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMetro2SubmissionSchema = createInsertSchema(metro2Submissions).omit({ id: true, createdAt: true });
+export type InsertMetro2Submission = z.infer<typeof insertMetro2SubmissionSchema>;
+export type Metro2Submission = typeof metro2Submissions.$inferSelect;
+
 // ─── API CONFIGS ──────────────────────────────────────────────────────────
 export const apiConfigs = pgTable("api_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

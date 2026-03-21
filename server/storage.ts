@@ -3,6 +3,7 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import {
   users, clients, disputes, creditReports, tradelines,
   creditLines, transactions, notifications, apiConfigs,
+  cardholderPartners, metro2Submissions,
   type User, type InsertUser,
   type Client, type InsertClient,
   type Dispute, type InsertDispute,
@@ -11,6 +12,8 @@ import {
   type CreditLine, type InsertCreditLine,
   type Transaction, type InsertTransaction,
   type Notification, type InsertNotification,
+  type CardholderPartner, type InsertCardholderPartner,
+  type Metro2Submission, type InsertMetro2Submission,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -66,6 +69,19 @@ export interface IStorage {
   createNotification(n: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string): Promise<void>;
   markAllNotificationsRead(): Promise<void>;
+
+  // Cardholder Partners
+  getCardholderPartners(): Promise<CardholderPartner[]>;
+  getCardholderPartner(id: string): Promise<CardholderPartner | undefined>;
+  createCardholderPartner(p: InsertCardholderPartner): Promise<CardholderPartner>;
+  updateCardholderPartner(id: string, data: Partial<InsertCardholderPartner>): Promise<CardholderPartner>;
+  deleteCardholderPartner(id: string): Promise<void>;
+
+  // Metro 2 Submissions
+  getMetro2Submissions(): Promise<Metro2Submission[]>;
+  getMetro2SubmissionsByClient(clientId: string): Promise<Metro2Submission[]>;
+  createMetro2Submission(s: InsertMetro2Submission): Promise<Metro2Submission>;
+  updateMetro2Submission(id: string, data: Partial<InsertMetro2Submission>): Promise<Metro2Submission>;
 
   // API Config
   getApiConfig(key: string): Promise<string | undefined>;
@@ -220,6 +236,42 @@ export class DatabaseStorage implements IStorage {
   }
   async markAllNotificationsRead() {
     await db.update(notifications).set({ read: true });
+  }
+
+  // Cardholder Partners
+  async getCardholderPartners() {
+    return db.select().from(cardholderPartners).orderBy(desc(cardholderPartners.createdAt));
+  }
+  async getCardholderPartner(id: string) {
+    const [p] = await db.select().from(cardholderPartners).where(eq(cardholderPartners.id, id));
+    return p;
+  }
+  async createCardholderPartner(p: InsertCardholderPartner) {
+    const [cp] = await db.insert(cardholderPartners).values(p).returning();
+    return cp;
+  }
+  async updateCardholderPartner(id: string, data: Partial<InsertCardholderPartner>) {
+    const [cp] = await db.update(cardholderPartners).set(data).where(eq(cardholderPartners.id, id)).returning();
+    return cp;
+  }
+  async deleteCardholderPartner(id: string) {
+    await db.delete(cardholderPartners).where(eq(cardholderPartners.id, id));
+  }
+
+  // Metro 2 Submissions
+  async getMetro2Submissions() {
+    return db.select().from(metro2Submissions).orderBy(desc(metro2Submissions.createdAt));
+  }
+  async getMetro2SubmissionsByClient(clientId: string) {
+    return db.select().from(metro2Submissions).where(eq(metro2Submissions.clientId, clientId));
+  }
+  async createMetro2Submission(s: InsertMetro2Submission) {
+    const [sub] = await db.insert(metro2Submissions).values(s).returning();
+    return sub;
+  }
+  async updateMetro2Submission(id: string, data: Partial<InsertMetro2Submission>) {
+    const [sub] = await db.update(metro2Submissions).set(data).where(eq(metro2Submissions.id, id)).returning();
+    return sub;
   }
 
   // API Config

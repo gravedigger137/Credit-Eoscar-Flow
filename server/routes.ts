@@ -4,8 +4,9 @@ import { storage } from "./storage";
 import {
   insertClientSchema, insertDisputeSchema, insertCreditReportSchema,
   insertTradelineSchema, insertCreditLineSchema, insertTransactionSchema,
-  insertNotificationSchema,
+  insertNotificationSchema, insertCardholderPartnerSchema, insertMetro2SubmissionSchema,
 } from "@shared/schema";
+import { buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES } from "./metro2";
 import { ZodError } from "zod";
 
 function handleError(res: Response, err: unknown) {
@@ -415,6 +416,142 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         eoscarSupported: false,
       },
     ]);
+  });
+
+  // ── CARDHOLDER PARTNERS ──────────────────────────────────────────────────
+  app.get("/api/partners", async (_req, res) => {
+    try {
+      res.json(await storage.getCardholderPartners());
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/partners", async (req, res) => {
+    try {
+      const data = insertCardholderPartnerSchema.parse(req.body);
+      res.status(201).json(await storage.createCardholderPartner(data));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.put("/api/partners/:id", async (req, res) => {
+    try {
+      const data = insertCardholderPartnerSchema.partial().parse(req.body);
+      res.json(await storage.updateCardholderPartner(req.params.id, data));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/partners/:id", async (req, res) => {
+    try {
+      await storage.deleteCardholderPartner(req.params.id);
+      res.json({ success: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── METRO 2 SUBMISSIONS ─────────────────────────────────────────────────
+  app.get("/api/metro2", async (_req, res) => {
+    try {
+      res.json(await storage.getMetro2Submissions());
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/metro2/client/:clientId", async (req, res) => {
+    try {
+      res.json(await storage.getMetro2SubmissionsByClient(req.params.clientId));
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Generate Metro 2 file from client data and record the submission
+  app.post("/api/metro2/generate", async (req, res) => {
+    try {
+      const {
+        clientId, bureau, portfolioType, accountType, accountStatus,
+        ecoaCode, creditLimit, currentBalance, accountNumber, companyId,
+        companyName, dateOpened, reportType
+      } = req.body;
+
+      if (!clientId || !bureau) {
+        return res.status(400).json({ message: "clientId and bureau are required" });
+      }
+
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const record = {
+        accountNumber: accountNumber || `AU-${clientId.slice(0, 8)}`,
+        portfolioType: portfolioType || "R",
+        accountType: accountType || "18",
+        dateOpened: dateOpened || new Date().toISOString().slice(0, 10),
+        creditLimit: creditLimit || 0,
+        currentBalance: currentBalance || 0,
+        accountStatus: accountStatus || "11",
+        paymentHistoryProfile: "CCCCCCCCCCCCCCCCCCCCCCC",
+        firstName: client.firstName,
+        lastName: client.lastName,
+        ssn: client.ssn || "",
+        dob: client.dateOfBirth || "",
+        address: client.address || "",
+        city: client.city || "",
+        state: client.state || "",
+        zip: client.zipCode || "",
+        ecoaCode: ecoaCode || "3",
+        companyId: companyId || "CRP001",
+        companyName: companyName || "CreditRepair Pro LLC",
+      };
+
+      const fileContent = buildMetro2File(
+        [record],
+        companyId || "CRP001",
+        companyName || "CreditRepair Pro LLC"
+      );
+
+      // Record the submission
+      const submission = await storage.createMetro2Submission({
+        clientId,
+        bureau,
+        accountNumber: accountNumber || `AU-${clientId.slice(0, 8)}`,
+        portfolioType: portfolioType || "R",
+        accountStatus: accountStatus || "11",
+        ecoaCode: ecoaCode || "3",
+        creditLimit: creditLimit || 0,
+        currentBalance: currentBalance || 0,
+        status: "generated",
+        fileContent,
+        reportType: reportType || "M",
+        submittedAt: null,
+      });
+
+      res.json({ submission, fileContent });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // Log a manual file upload (user uploads to bureau portal themselves)
+  app.post("/api/metro2/upload", async (req, res) => {
+    try {
+      const { bureau, fileName, fileContent } = req.body;
+      if (!bureau) return res.status(400).json({ message: "bureau is required" });
+
+      const submission = await storage.createMetro2Submission({
+        clientId: null,
+        bureau,
+        accountNumber: fileName || "Manual Upload",
+        portfolioType: "R",
+        accountStatus: "11",
+        ecoaCode: "3",
+        creditLimit: 0,
+        currentBalance: 0,
+        status: "submitted",
+        fileContent: fileContent || "",
+        reportType: "M",
+        submittedAt: new Date(),
+      });
+
+      res.status(201).json(submission);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.put("/api/metro2/:id", async (req, res) => {
+    try {
+      res.json(await storage.updateMetro2Submission(req.params.id, req.body));
+    } catch (e) { handleError(res, e); }
   });
 
   return httpServer;

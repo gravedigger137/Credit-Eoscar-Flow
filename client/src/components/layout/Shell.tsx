@@ -1,18 +1,19 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "Disputes (e-OSCAR)", href: "/disputes", icon: FileText },
   { name: "Credit Reports", href: "/reports", icon: Activity },
   { name: "Tradelines", href: "/tradelines", icon: CreditCard },
   { name: "Revolving Credit", href: "/credit-lines", icon: Wallet },
+  { name: "Bureau Uploads", href: "/uploads", icon: Upload },
   { name: "Billing & Revenue", href: "/billing", icon: DollarSign },
   { name: "Inbox", href: "/notifications", icon: Bell },
   { name: "Compliance", href: "/compliance", icon: ShieldCheck },

@@ -16,6 +16,8 @@ import Settings from "@/pages/settings";
 import Billing from "@/pages/billing";
 import Notifications from "@/pages/notifications";
 import Uploads from "@/pages/uploads";
+import Partners from "@/pages/partners";
+import Metro2 from "@/pages/metro2";
 
 function Router() {
   return (
@@ -27,11 +29,13 @@ function Router() {
       <Route path="/reports" component={Reports}/>
       <Route path="/tradelines" component={Tradelines}/>
       <Route path="/credit-lines" component={CreditLines}/>
+      <Route path="/uploads" component={Uploads}/>
+      <Route path="/partners" component={Partners}/>
+      <Route path="/metro2" component={Metro2}/>
       <Route path="/billing" component={Billing}/>
       <Route path="/notifications" component={Notifications}/>
       <Route path="/compliance" component={Compliance}/>
       <Route path="/settings" component={Settings}/>
-      <Route path="/uploads" component={Uploads}/>
       <Route component={NotFound} />
     </Switch>
   );

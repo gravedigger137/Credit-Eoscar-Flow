@@ -1,6 +1,6 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,9 @@ const navigation = [
   { name: "Disputes (e-OSCAR)", href: "/disputes", icon: FileText },
   { name: "Credit Reports", href: "/reports", icon: Activity },
   { name: "Tradelines", href: "/tradelines", icon: CreditCard },
+  { name: "AU Partners", href: "/partners", icon: UserCheck },
   { name: "Revolving Credit", href: "/credit-lines", icon: Wallet },
+  { name: "Metro 2 Filings", href: "/metro2", icon: Database },
   { name: "Bureau Uploads", href: "/uploads", icon: Upload },
   { name: "Billing & Revenue", href: "/billing", icon: DollarSign },
   { name: "Inbox", href: "/notifications", icon: Bell },

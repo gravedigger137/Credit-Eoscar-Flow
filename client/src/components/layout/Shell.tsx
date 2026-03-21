@@ -1,7 +1,8 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -10,6 +11,8 @@ const navigation = [
   { name: "Credit Reports", href: "/reports", icon: Activity },
   { name: "Tradelines", href: "/tradelines", icon: CreditCard },
   { name: "Revolving Credit", href: "/credit-lines", icon: Wallet },
+  { name: "Billing & Revenue", href: "/billing", icon: DollarSign },
+  { name: "Inbox", href: "/notifications", icon: Bell, badge: "2" },
   { name: "Compliance", href: "/compliance", icon: ShieldCheck },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -33,15 +36,22 @@ export function AppSidebar() {
                 <SidebarMenuButton 
                   isActive={location === item.href}
                   className={cn(
-                    "w-full justify-start gap-3 px-4 py-2.5 transition-all duration-200",
+                    "w-full justify-between px-4 py-2.5 transition-all duration-200",
                     location === item.href 
                       ? "bg-primary/10 text-primary font-medium border-r-2 border-primary" 
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}
                   tooltip={item.name}
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.name}</span>
+                  <div className="flex items-center gap-3">
+                    <item.icon className="w-5 h-5" />
+                    <span>{item.name}</span>
+                  </div>
+                  {item.badge && (
+                    <Badge variant="default" className="bg-primary hover:bg-primary/90 rounded-full h-5 w-5 p-0 flex items-center justify-center text-[10px]">
+                      {item.badge}
+                    </Badge>
+                  )}
                 </SidebarMenuButton>
               </Link>
             </SidebarMenuItem>
@@ -69,7 +79,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {/* Add user profile/notifications here later */}
+              <Link href="/notifications">
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="w-5 h-5" />
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-destructive border border-background"></span>
+                </Button>
+              </Link>
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm">
                 JD
               </div>

@@ -12,6 +12,8 @@ import Disputes from "@/pages/disputes";
 import Reports from "@/pages/reports";
 import Compliance from "@/pages/compliance";
 import Settings from "@/pages/settings";
+import Billing from "@/pages/billing";
+import Notifications from "@/pages/notifications";
 
 function Router() {
   return (
@@ -22,6 +24,8 @@ function Router() {
       <Route path="/reports" component={Reports}/>
       <Route path="/tradelines" component={Tradelines}/>
       <Route path="/credit-lines" component={CreditLines}/>
+      <Route path="/billing" component={Billing}/>
+      <Route path="/notifications" component={Notifications}/>
       <Route path="/compliance" component={Compliance}/>
       <Route path="/settings" component={Settings}/>
       <Route component={NotFound} />

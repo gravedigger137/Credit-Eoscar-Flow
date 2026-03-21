@@ -1,197 +1,257 @@
 import { Shell } from "@/components/layout/Shell";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Plus, Filter, ArrowUpRight, TrendingUp, CheckCircle2, Lock, Smartphone, PieChart } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useState } from "react";
+import { Search, Plus, Wallet, TrendingUp, Clock, CheckCircle2, Lock, Smartphone } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
+
+const PRODUCTS = [
+  { value: "builder_loan", label: "Credit Builder Loan (Self / Credit Strong)", provider: "Self / Credit Strong", icon: Lock, color: "text-blue-500", bg: "bg-blue-100 dark:bg-blue-900" },
+  { value: "revolving_store", label: "Revolving Store Card (Kikoff / Fingerhut)", provider: "Kikoff / Fingerhut", icon: Smartphone, color: "text-emerald-500", bg: "bg-emerald-100 dark:bg-emerald-900" },
+  { value: "secured_card", label: "Secured Credit Card", provider: "OpenSky / Capital One", icon: CheckCircle2, color: "text-violet-500", bg: "bg-violet-100 dark:bg-violet-900" },
+  { value: "magnum_builder", label: "Magnum Cash Advance Builder", provider: "In-house", icon: TrendingUp, color: "text-primary", bg: "bg-primary/10" },
+];
+
+const emptyForm = {
+  clientId: "", productType: "builder_loan", productName: "", provider: "",
+  creditLimit: "", monthlyPayment: "", termMonths: "", status: "applied", notes: "",
+};
+
+const statusColor: Record<string, string> = {
+  applied: "border-blue-500 text-blue-600",
+  reviewing: "border-amber-500 text-amber-600",
+  approved: "border-violet-500 text-violet-600",
+  active: "border-emerald-500 text-emerald-600",
+  rejected: "border-destructive text-destructive",
+  closed: "border-muted-foreground text-muted-foreground",
+};
 
 export default function CreditLines() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+
+  const { data: creditLines = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/credit-lines"] });
+  const { data: clients = [] } = useQuery<any[]>({ queryKey: ["/api/clients"] });
+
+  const clientMap = Object.fromEntries(clients.map((c: any) => [c.id, `${c.firstName} ${c.lastName}`]));
+
+  const createMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/credit-lines", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/credit-lines"] });
+      qc.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      setOpen(false);
+      setForm(emptyForm);
+      toast({ title: "Client enrolled in credit builder!" });
+    },
+    onError: () => toast({ title: "Error enrolling client", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/credit-lines/${id}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/credit-lines"] }); toast({ title: "Status updated!" }); },
+  });
+
+  const filtered = creditLines.filter((c: any) =>
+    `${clientMap[c.clientId] ?? ""} ${c.productName}`.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <Shell>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Credit Building Products</h1>
-            <p className="text-muted-foreground mt-1">
-              Manage client enrollments in Self, Kikoff, and Credit Strong style credit builder accounts.
-            </p>
+            <h1 className="text-3xl font-bold tracking-tight">Revolving Credit & Builders</h1>
+            <p className="text-muted-foreground mt-1">Manage enrollments in credit builder loans, secured cards, and revolving lines.</p>
           </div>
-          <Button className="bg-primary text-primary-foreground">
-            <Plus className="w-4 h-4 mr-2" />
-            New Enrollment
-          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Plus className="w-4 h-4 mr-2" /> Enroll Client
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Enroll in Credit Builder</DialogTitle>
+                <DialogDescription>Assign a credit building product to a client's account.</DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2 col-span-2">
+                  <Label>Client *</Label>
+                  <Select value={form.clientId} onValueChange={v => setForm(f => ({ ...f, clientId: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select client..." /></SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Product Type *</Label>
+                  <Select value={form.productType} onValueChange={v => {
+                    const p = PRODUCTS.find(x => x.value === v);
+                    setForm(f => ({ ...f, productType: v, provider: p?.provider ?? "" }));
+                  }}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PRODUCTS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Product Name *</Label>
+                  <Input value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} placeholder="e.g. Self Credit Builder $25/mo" />
+                </div>
+                <div className="space-y-2"><Label>Provider</Label><Input value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Credit Limit ($)</Label><Input type="number" value={form.creditLimit} onChange={e => setForm(f => ({ ...f, creditLimit: e.target.value }))} placeholder="500" /></div>
+                <div className="space-y-2"><Label>Monthly Payment ($)</Label><Input type="number" value={form.monthlyPayment} onChange={e => setForm(f => ({ ...f, monthlyPayment: e.target.value }))} placeholder="25" /></div>
+                <div className="space-y-2"><Label>Term (months)</Label><Input type="number" value={form.termMonths} onChange={e => setForm(f => ({ ...f, termMonths: e.target.value }))} placeholder="12" /></div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Notes</Label>
+                  <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Enrollment notes..." />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={() => createMutation.mutate({
+                    ...form,
+                    creditLimit: form.creditLimit ? parseInt(form.creditLimit) * 100 : undefined,
+                    monthlyPayment: form.monthlyPayment ? parseInt(form.monthlyPayment) * 100 : undefined,
+                    termMonths: form.termMonths ? parseInt(form.termMonths) : undefined,
+                  })}
+                  disabled={createMutation.isPending || !form.clientId || !form.productName}
+                >
+                  {createMutation.isPending ? "Enrolling..." : "Enroll Client"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
-        <Tabs defaultValue="products" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-            <TabsTrigger value="products">Our Products</TabsTrigger>
-            <TabsTrigger value="active">Active Enrollments</TabsTrigger>
-            <TabsTrigger value="metrics">Performance Metrics</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="products" className="mt-6">
-            <div className="grid gap-6 md:grid-cols-3">
-              {/* Product 1: Installment Loan Builder (Self Clone) */}
-              <Card className="glass-panel border-t-4 border-t-blue-500 relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">POPULAR</div>
-                <CardHeader>
-                  <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center mb-4">
-                    <Lock className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {PRODUCTS.map((p, i) => {
+            const Icon = p.icon;
+            const count = creditLines.filter((c: any) => c.productType === p.value).length;
+            return (
+              <Card key={i} className="glass-panel">
+                <CardHeader className="pb-2">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${p.bg}`}>
+                    <Icon className={`w-5 h-5 ${p.color}`} />
                   </div>
-                  <CardTitle>Credit Builder Loan</CardTitle>
-                  <CardDescription>Installment account that forces savings while building credit.</CardDescription>
+                  <CardTitle className="text-sm">{p.label.split("(")[0].trim()}</CardTitle>
+                  <CardDescription className="text-xs">{p.provider}</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Monthly Payment</span>
-                      <span className="font-bold">$25 - $150</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Term Length</span>
-                      <span className="font-bold">12 - 24 months</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Setup Fee</span>
-                      <span className="font-bold">$9</span>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md text-xs text-muted-foreground">
-                    Client pays monthly. Money is locked in a CD. At the end of the term, they get their money back (minus fees) and a paid-off installment loan on their credit report.
-                  </div>
+                <CardContent>
+                  <div className="text-2xl font-bold">{count}</div>
+                  <p className="text-xs text-muted-foreground">clients enrolled</p>
                 </CardContent>
-                <CardFooter>
-                  <Button className="w-full" variant="outline">View Details</Button>
-                </CardFooter>
               </Card>
+            );
+          })}
+        </div>
 
-              {/* Product 2: Revolving Line (Kikoff Clone) */}
-              <Card className="glass-panel border-t-4 border-t-emerald-500">
-                <CardHeader>
-                  <div className="w-12 h-12 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center mb-4">
-                    <Smartphone className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <CardTitle>Revolving Store Line</CardTitle>
-                  <CardDescription>Instant $750 credit line with 0% utilization.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Credit Limit</span>
-                      <span className="font-bold">$750</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Monthly Fee</span>
-                      <span className="font-bold">$5/mo</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Setup Fee</span>
-                      <span className="font-bold">$0</span>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md text-xs text-muted-foreground">
-                    Client gets a $750 store credit line that reports to bureaus. High limit and low usage instantly boosts their available credit and lowers utilization ratio.
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button className="w-full" variant="outline">View Details</Button>
-                </CardFooter>
-              </Card>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="glass-panel border-l-4 border-l-emerald-500">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" />Active</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{creditLines.filter((c: any) => c.status === "active").length}</div></CardContent>
+          </Card>
+          <Card className="glass-panel border-l-4 border-l-blue-500">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" />Pending Approval</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{creditLines.filter((c: any) => ["applied", "reviewing"].includes(c.status)).length}</div></CardContent>
+          </Card>
+          <Card className="glass-panel border-l-4 border-l-primary">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" />Total Enrolled</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{creditLines.length}</div></CardContent>
+          </Card>
+        </div>
 
-              {/* Product 3: High Limit Builder (Credit Strong Clone) */}
-              <Card className="glass-panel border-t-4 border-t-purple-500">
-                <CardHeader>
-                  <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center mb-4">
-                    <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <CardTitle>Magnum Builder Line</CardTitle>
-                  <CardDescription>High-limit installment accounts up to $10,000.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Reported Limit</span>
-                      <span className="font-bold">$5k - $10k</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Monthly Payment</span>
-                      <span className="font-bold">$55 - $110</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Setup Fee</span>
-                      <span className="font-bold">$25</span>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md text-xs text-muted-foreground">
-                    Similar to the basic builder, but reports a massive installment amount to radically improve credit mix and high-credit markers.
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button className="w-full" variant="outline">View Details</Button>
-                </CardFooter>
-              </Card>
+        <Card className="glass-panel">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div><CardTitle>All Enrolled Accounts</CardTitle><CardDescription>Live credit builder and revolving line enrollments.</CardDescription></div>
+              <div className="relative sm:w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Search..." className="pl-8 bg-background" value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
             </div>
-          </TabsContent>
-
-          <TabsContent value="active" className="mt-6">
-            <Card className="glass-panel">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <CardTitle>Active Client Enrollments</CardTitle>
-                    <CardDescription>Track monthly payments and reporting status.</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-64">
-                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Search client..." className="pl-8 bg-background" />
-                    </div>
-                    <Button variant="outline" size="icon"><Filter className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    { name: "Sarah Jenkins", product: "Credit Builder Loan ($25/mo)", progress: 45, status: "Active", nextPayment: "Nov 15" },
-                    { name: "Michael Chang", product: "Revolving Store Line ($750)", progress: 100, status: "Active", nextPayment: "Auto-pay" },
-                    { name: "David Roberts", product: "Magnum Builder ($5k)", progress: 10, status: "Missed Payment", nextPayment: "Overdue" },
-                  ].map((enrollment, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 border rounded-lg bg-background/50">
-                      <div className="flex items-center gap-4 w-1/3">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center font-bold text-sm">
-                          {enrollment.name.split(' ').map(n=>n[0]).join('')}
-                        </div>
-                        <div>
-                          <p className="font-medium">{enrollment.name}</p>
-                          <p className="text-xs text-muted-foreground">{enrollment.product}</p>
-                        </div>
-                      </div>
-                      <div className="w-1/3 px-4">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span>Term Progress</span>
-                          <span>{enrollment.progress}%</span>
-                        </div>
-                        <Progress value={enrollment.progress} className="h-2" indicatorClassName={enrollment.status === 'Missed Payment' ? 'bg-destructive' : 'bg-primary'} />
-                      </div>
-                      <div className="w-1/3 flex justify-end items-center gap-4">
-                        <div className="text-right">
-                          <Badge variant={enrollment.status === 'Active' ? 'outline' : 'destructive'} className={enrollment.status === 'Active' ? 'border-success text-success' : ''}>
-                            {enrollment.status}
-                          </Badge>
-                          <p className="text-xs text-muted-foreground mt-1">Next: {enrollment.nextPayment}</p>
-                        </div>
-                        <Button variant="ghost" size="sm">Manage</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="text-center py-10 text-muted-foreground">Loading accounts...</div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Wallet className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p>No credit builder accounts yet. Enroll a client above.</p>
+              </div>
+            ) : (
+              <div className="rounded-md border bg-background/50">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Limit / Payment</TableHead>
+                      <TableHead>Progress</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Update</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((c: any) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">{clientMap[c.clientId] ?? "Unknown"}</TableCell>
+                        <TableCell>
+                          <div><p className="font-medium">{c.productName}</p>{c.provider && <p className="text-xs text-muted-foreground">{c.provider}</p>}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            {c.creditLimit && <p className="font-bold">${(c.creditLimit / 100).toFixed(0)}</p>}
+                            {c.monthlyPayment && <p className="text-xs text-muted-foreground">${(c.monthlyPayment / 100).toFixed(0)}/mo</p>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="w-24">
+                            <Progress value={c.progressPercent ?? 0} className="h-2 mb-1" />
+                            <p className="text-xs text-muted-foreground">{c.progressPercent ?? 0}%</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={statusColor[c.status] || ""}>{c.status}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Select value={c.status} onValueChange={val => updateMutation.mutate({ id: c.id, data: { status: val } })}>
+                            <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="applied">Applied</SelectItem>
+                              <SelectItem value="reviewing">Reviewing</SelectItem>
+                              <SelectItem value="approved">Approved</SelectItem>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="rejected">Rejected</SelectItem>
+                              <SelectItem value="closed">Closed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </Shell>
   );

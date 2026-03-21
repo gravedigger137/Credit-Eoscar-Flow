@@ -1,18 +1,26 @@
 import { Shell } from "@/components/layout/Shell";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileText, AlertTriangle, CheckCircle2, TrendingUp, Clock, CreditCard, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { Users, FileText, TrendingUp, Clock, CreditCard, Wallet, AlertTriangle, CheckCircle2, DollarSign } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Link } from "wouter";
 
 export default function Dashboard() {
+  const { data: stats } = useQuery<any>({ queryKey: ["/api/dashboard/stats"] });
+  const { data: clients = [] } = useQuery<any[]>({ queryKey: ["/api/clients"] });
+  const { data: disputes = [] } = useQuery<any[]>({ queryKey: ["/api/disputes"] });
+  const { data: transactions = [] } = useQuery<any[]>({ queryKey: ["/api/transactions"] });
+
+  const recentClients = clients.slice(0, 5);
+
   return (
     <Shell>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Overview of your credit repair operations, tradelines, and credit building.
-          </p>
+          <p className="text-muted-foreground mt-1">Live overview of all credit repair operations.</p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -22,24 +30,20 @@ export default function Dashboard() {
               <Users className="w-4 h-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">142</div>
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3 text-success" />
-                <span className="text-success font-medium">+12%</span> from last month
-              </p>
+              <div className="text-2xl font-bold">{stats?.activeClients ?? clients.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total in system: {clients.length}</p>
             </CardContent>
           </Card>
 
-          <Card className="glass-panel border-l-4 border-l-warning">
+          <Card className="glass-panel border-l-4 border-l-amber-500">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
               <CardTitle className="text-sm font-medium text-muted-foreground">Pending Disputes</CardTitle>
-              <FileText className="w-4 h-4 text-warning" />
+              <FileText className="w-4 h-4 text-amber-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">87</div>
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                <span>34 waiting on bureau response</span>
+              <div className="text-2xl font-bold">{stats?.pendingDisputes ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats?.deletedItems ?? 0} items deleted
               </p>
             </CardContent>
           </Card>
@@ -50,23 +54,21 @@ export default function Dashboard() {
               <CreditCard className="w-4 h-4 text-indigo-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">56</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                22 pending assignment
-              </p>
+              <div className="text-2xl font-bold">{stats?.activeTradelines ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">{stats?.activeCreditLines ?? 0} credit builder accounts</p>
             </CardContent>
           </Card>
 
           <Card className="glass-panel border-l-4 border-l-emerald-500">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Credit Lines Approved</CardTitle>
-              <Wallet className="w-4 h-4 text-emerald-500" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+              <DollarSign className="w-4 h-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">18</div>
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <span className="text-emerald-500 font-medium">This Month</span>
-              </p>
+              <div className="text-2xl font-bold">
+                ${stats?.totalRevenue ? (stats.totalRevenue / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Lifetime completed transactions</p>
             </CardContent>
           </Card>
         </div>
@@ -75,20 +77,18 @@ export default function Dashboard() {
           <Card className="lg:col-span-4 glass-panel">
             <CardHeader>
               <CardTitle>Service Pipeline</CardTitle>
-              <CardDescription>
-                Current status of client services across all offerings.
-              </CardDescription>
+              <CardDescription>Active services across your operation.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium flex items-center gap-2">
                     <FileText className="w-4 h-4 text-blue-500" />
-                    e-OSCAR Disputes Processing
+                    Dispute Submissions
                   </span>
-                  <span className="text-muted-foreground">87 active</span>
+                  <span className="text-muted-foreground">{disputes.filter((d: any) => d.status === "sent").length} active</span>
                 </div>
-                <Progress value={65} className="h-2 bg-blue-100 dark:bg-blue-950" indicatorClassName="bg-blue-500" />
+                <Progress value={disputes.length ? (disputes.filter((d: any) => d.status === "sent").length / disputes.length) * 100 : 0} className="h-2" />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
@@ -96,58 +96,68 @@ export default function Dashboard() {
                     <CreditCard className="w-4 h-4 text-indigo-500" />
                     Tradeline Placements
                   </span>
-                  <span className="text-muted-foreground">45 pending</span>
+                  <span className="text-muted-foreground">{stats?.activeTradelines ?? 0} active</span>
                 </div>
-                <Progress value={45} className="h-2 bg-indigo-100 dark:bg-indigo-950" indicatorClassName="bg-indigo-500" />
+                <Progress value={45} className="h-2 [&>div]:bg-indigo-500" />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-emerald-500" />
-                    Revolving Credit Applications
+                    Credit Builder Accounts
                   </span>
-                  <span className="text-muted-foreground">32 processing</span>
+                  <span className="text-muted-foreground">{stats?.activeCreditLines ?? 0} enrolled</span>
                 </div>
-                <Progress value={30} className="h-2 bg-emerald-100 dark:bg-emerald-950" indicatorClassName="bg-emerald-500" />
+                <Progress value={30} className="h-2 [&>div]:bg-emerald-500" />
               </div>
             </CardContent>
           </Card>
 
           <Card className="lg:col-span-3 glass-panel">
             <CardHeader>
-              <CardTitle>Recent Client Activity</CardTitle>
-              <CardDescription>Latest updates on client files</CardDescription>
+              <div className="flex items-center justify-between">
+                <CardTitle>Recent Clients</CardTitle>
+                <Link href="/clients">
+                  <Button variant="ghost" size="sm">View All</Button>
+                </Link>
+              </div>
+              <CardDescription>Last added to the system</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  { name: "Sarah Jenkins", action: "Tradeline Added (Chase)", time: "2 hours ago", status: "success" },
-                  { name: "Michael Chang", action: "Credit Line Approved", time: "4 hours ago", status: "success" },
-                  { name: "Amanda Smith", action: "Item Deleted (TransUnion)", time: "5 hours ago", status: "success" },
-                  { name: "David Roberts", action: "Tradeline Verification Failed", time: "1 day ago", status: "destructive" },
-                  { name: "Jessica Alba", action: "New Client Onboarding", time: "1 day ago", status: "default" },
-                ].map((activity, i) => (
-                  <div key={i} className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0 last:pb-0">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
-                        {activity.name.split(' ').map(n => n[0]).join('')}
+              {recentClients.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                  <p className="text-sm">No clients yet. Add your first client.</p>
+                  <Link href="/clients">
+                    <Button className="mt-4" size="sm">Add Client</Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recentClients.map((client: any) => (
+                    <div key={client.id} className="flex items-center justify-between border-b border-border/50 pb-3 last:border-0 last:pb-0">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+                          {client.firstName[0]}{client.lastName[0]}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{client.firstName} {client.lastName}</p>
+                          <p className="text-xs text-muted-foreground">{client.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{activity.name}</p>
-                        <p className="text-xs text-muted-foreground">{activity.action}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground mb-1">{activity.time}</p>
-                      <Badge variant={activity.status as any} className="text-[10px] h-4">
-                        {activity.status === 'success' ? 'Resolved' : 
-                         activity.status === 'warning' ? 'Pending' : 
-                         activity.status === 'destructive' ? 'Action Needed' : 'New'}
+                      <Badge 
+                        variant="outline"
+                        className={
+                          client.status === 'active' ? 'border-emerald-500 text-emerald-600' : 
+                          client.status === 'onboarding' ? 'border-amber-500 text-amber-600' : ''
+                        }
+                      >
+                        {client.status}
                       </Badge>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

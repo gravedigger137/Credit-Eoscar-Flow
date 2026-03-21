@@ -4,6 +4,7 @@ import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, Cred
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -13,13 +14,15 @@ const navigation = [
   { name: "Tradelines", href: "/tradelines", icon: CreditCard },
   { name: "Revolving Credit", href: "/credit-lines", icon: Wallet },
   { name: "Billing & Revenue", href: "/billing", icon: DollarSign },
-  { name: "Inbox", href: "/notifications", icon: Bell, badge: "2" },
+  { name: "Inbox", href: "/notifications", icon: Bell },
   { name: "Compliance", href: "/compliance", icon: ShieldCheck },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { data } = useQuery<{ count: number }>({ queryKey: ["/api/notifications/unread-count"], refetchInterval: 30000 });
+  const unreadCount = data?.count ?? 0;
 
   return (
     <Sidebar className="border-r border-border/50 bg-sidebar">
@@ -31,32 +34,35 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className="py-4">
         <SidebarMenu>
-          {navigation.map((item) => (
-            <SidebarMenuItem key={item.name}>
-              <Link href={item.href}>
-                <SidebarMenuButton 
-                  isActive={location === item.href}
-                  className={cn(
-                    "w-full justify-between px-4 py-2.5 transition-all duration-200",
-                    location === item.href 
-                      ? "bg-primary/10 text-primary font-medium border-r-2 border-primary" 
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                  )}
-                  tooltip={item.name}
-                >
-                  <div className="flex items-center gap-3">
-                    <item.icon className="w-5 h-5" />
-                    <span>{item.name}</span>
-                  </div>
-                  {item.badge && (
-                    <Badge variant="default" className="bg-primary hover:bg-primary/90 rounded-full h-5 w-5 p-0 flex items-center justify-center text-[10px]">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-          ))}
+          {navigation.map((item) => {
+            const isInbox = item.name === "Inbox";
+            return (
+              <SidebarMenuItem key={item.name}>
+                <Link href={item.href}>
+                  <SidebarMenuButton 
+                    isActive={location === item.href}
+                    className={cn(
+                      "w-full justify-between px-4 py-2.5 transition-all duration-200",
+                      location === item.href 
+                        ? "bg-primary/10 text-primary font-medium border-r-2 border-primary" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                    tooltip={item.name}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className="w-5 h-5" />
+                      <span>{item.name}</span>
+                    </div>
+                    {isInbox && unreadCount > 0 && (
+                      <Badge variant="default" className="bg-primary hover:bg-primary/90 rounded-full h-5 min-w-5 px-1 flex items-center justify-center text-[10px]">
+                        {unreadCount}
+                      </Badge>
+                    )}
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       </SidebarContent>
     </Sidebar>

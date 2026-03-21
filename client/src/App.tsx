@@ -18,6 +18,7 @@ import Notifications from "@/pages/notifications";
 import Uploads from "@/pages/uploads";
 import Partners from "@/pages/partners";
 import Metro2 from "@/pages/metro2";
+import AIPage from "@/pages/ai";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/uploads" component={Uploads}/>
       <Route path="/partners" component={Partners}/>
       <Route path="/metro2" component={Metro2}/>
+      <Route path="/ai" component={AIPage}/>
       <Route path="/billing" component={Billing}/>
       <Route path="/notifications" component={Notifications}/>
       <Route path="/compliance" component={Compliance}/>

@@ -1,6 +1,6 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ const navigation = [
   { name: "Revolving Credit", href: "/credit-lines", icon: Wallet },
   { name: "Metro 2 Filings", href: "/metro2", icon: Database },
   { name: "Bureau Uploads", href: "/uploads", icon: Upload },
+  { name: "AI Command Center", href: "/ai", icon: Sparkles },
   { name: "Billing & Revenue", href: "/billing", icon: DollarSign },
   { name: "Inbox", href: "/notifications", icon: Bell },
   { name: "Compliance", href: "/compliance", icon: ShieldCheck },

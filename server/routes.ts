@@ -7,11 +7,19 @@ import {
   insertNotificationSchema, insertCardholderPartnerSchema, insertMetro2SubmissionSchema,
 } from "@shared/schema";
 import { buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES } from "./metro2";
+import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record } from "./ai";
 import { ZodError } from "zod";
 
 function handleError(res: Response, err: unknown) {
   if (err instanceof ZodError) {
     return res.status(400).json({ message: "Validation error", errors: err.errors });
+  }
+  const e = err as any;
+  if (e?.code === "insufficient_quota") {
+    return res.status(402).json({ message: "OpenAI quota exceeded — add credits at platform.openai.com/settings/billing", code: "quota_exceeded" });
+  }
+  if (e?.code === "invalid_api_key") {
+    return res.status(401).json({ message: "Invalid OpenAI API key — check your key in Secrets", code: "invalid_key" });
   }
   console.error(err);
   return res.status(500).json({ message: "Internal server error" });
@@ -551,6 +559,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.put("/api/metro2/:id", async (req, res) => {
     try {
       res.json(await storage.updateMetro2Submission(req.params.id, req.body));
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ── AI ENDPOINTS ────────────────────────────────────────────────────────────
+
+  // AI Dispute Letter Generator
+  app.post("/api/ai/dispute-letter", async (req, res) => {
+    try {
+      const { clientName, bureau, accountName, accountNumber, reason, type } = req.body;
+      if (!clientName || !bureau || !accountName || !reason || !type) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      const letter = await generateDisputeLetter({ clientName, bureau, accountName, accountNumber, reason, type });
+      res.json({ letter });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // AI Client Credit Analysis
+  app.post("/api/ai/analyze-client", async (req, res) => {
+    try {
+      const { clientName, scores, negativeItems, goal } = req.body;
+      if (!clientName) return res.status(400).json({ message: "clientName is required" });
+      const analysis = await analyzeClientCredit({ clientName, scores: scores ?? {}, negativeItems: negativeItems ?? [], goal });
+      res.json({ analysis });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // AI Chat Assistant
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { messages } = req.body;
+      if (!messages || !Array.isArray(messages)) return res.status(400).json({ message: "messages array required" });
+      const reply = await chatWithAI(messages);
+      res.json({ reply });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // AI Metro 2 Validator
+  app.post("/api/ai/validate-metro2", async (req, res) => {
+    try {
+      const { record } = req.body;
+      if (!record) return res.status(400).json({ message: "record is required" });
+      const result = await validateMetro2Record(record);
+      res.json({ result });
     } catch (e) { handleError(res, e); }
   });
 

@@ -39,6 +39,7 @@ A professional credit repair business management platform for credit repair agen
 - **Bureau Uploads** — Per-bureau tabs with drag-and-drop upload zone, direct portal links
 - **AI Command Center** — GPT-4o powered chat, dispute letter generator, client analysis, Metro 2 validator
 - **Post-Upload AI Pipeline** — When a credit report (PDF/XML/TXT) is uploaded for a client, the Consumer Credit Specialist AI automatically: 1) parses the report, 2) updates client scores, 3) analyzes every negative item with FCRA/FDCPA legal citations, 4) creates dispute letters for each item across all 3 bureaus. Manual trigger via `POST /api/clients/:id/auto-analyze`. Deduplication by creditor+bureau prevents duplicate disputes.
+- **Tradeline AI Processor** — AI-driven tradeline optimization engine: per-client partner matching with score-weighted ranking, batch parallel processing for all active clients, credit behavior analysis (risk segmentation, readiness scoring, behavioral indicators), GPT-4o strategic placement recommendations. APIs: `GET /api/tradelines/optimize/:clientId`, `POST /api/tradelines/batch-optimize`, `GET /api/tradelines/behavior/:clientId`, `POST /api/tradelines/ai-strategy/:clientId`. Automation: `tradeline_optimization` workflow in automation engine with weekly scheduling.
 - **Billing** — Transaction ledger, Stripe Checkout integration, revenue tracking by service type
 - **Inbox / Notifications** — Auto-generated alerts for disputes, payments, clients; live unread badge
 - **Compliance** — CROA/FCRA/FDCPA audit log, bureau contact directory (all 6 bureaus)
@@ -72,6 +73,7 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `server/credit-monitor.ts` — Automated credit monitoring with score change detection, XML report parsing, alert deduplication
 - `server/financial-calculator.ts` — Fintech calculator engine: loan amortization, debt payoff (avalanche/snowball), credit repair ROI, compound interest, DTI analysis
 - `client/src/pages/calculators/index.tsx` — Financial Calculators page (4 tabs: Loan, Debt Payoff, Repair ROI, DTI)
+- `server/tradeline-processor.ts` — AI-driven tradeline optimization engine: partner matching, batch processing, behavior analysis, GPT-4o strategy
 - `server/financial-reports.ts` — Sales reports, revenue forecasting, credit sales POS, credit factor snapshots (priyaranjan756/Creditshelf + francheska-guzman/credit-report patterns)
 - `client/src/pages/bureau/index.tsx` — Bureau & Score Simulator page (3 tabs: Report Parser, Score Simulator, Bureau APIs) — 4 bureaus: EQ/EX/TU + CBC/Innovis
 - `client/src/pages/analytics/index.tsx` — Financial Analytics page (4 tabs: Credit Predictor, Sales Reports, Revenue Forecast, Credit Sales POS)

@@ -45,6 +45,9 @@ import {
 } from "./usage-metering";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import {
+  optimizeTradelinesForClient, batchOptimizeAll, analyzeClientBehavior, aiTradelineStrategy,
+} from "./tradeline-processor";
+import {
   getAutomationRules, getAutomationRule, createAutomationRule, updateAutomationRule,
   deleteAutomationRule, toggleAutomationRule, getAutomationRuns, getRunsForRule,
   executeAutomationRule, getAutomationStats, getWorkflowTypes, seedDefaultRules, startScheduler,
@@ -403,6 +406,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         clientId: tl.clientId,
         read: false,
       });
+      dispatchEvent("tradeline_created", { clientId: tl.clientId, tradelineId: tl.id }).catch(() => {});
       res.status(201).json(tl);
     } catch (err) { handleError(res, err); }
   });
@@ -417,6 +421,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       await storage.deleteTradeline(req.params.id);
       res.json({ success: true });
+    } catch (err) { handleError(res, err); }
+  });
+
+  // ─── TRADELINE AI PROCESSOR ──────────────────────────────────────────────
+  app.get("/api/tradelines/optimize/:clientId", async (req, res) => {
+    try {
+      const plan = await optimizeTradelinesForClient(req.params.clientId);
+      if (!plan) return res.status(404).json({ message: "Client not found" });
+      res.json(plan);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/tradelines/batch-optimize", async (_req, res) => {
+    try {
+      const result = await batchOptimizeAll();
+      res.json(result);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/api/tradelines/behavior/:clientId", async (req, res) => {
+    try {
+      const profile = await analyzeClientBehavior(req.params.clientId);
+      if (!profile) return res.status(404).json({ message: "Client not found" });
+      res.json(profile);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/tradelines/ai-strategy/:clientId", async (req, res) => {
+    try {
+      const client = await storage.getClient(req.params.clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+      const strategy = await aiTradelineStrategy(req.params.clientId);
+      res.json(strategy);
     } catch (err) { handleError(res, err); }
   });
 

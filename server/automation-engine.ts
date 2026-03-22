@@ -5,13 +5,15 @@ import { generateDisputeLetter, analyzeClientCredit, chatWithAI } from "./ai";
 import { detectScoreChanges, createAlertsAsNotifications } from "./credit-monitor";
 import { recordUsageEvent } from "./usage-metering";
 import { generateFCRADisputeLetter } from "./dispute-letters";
+import { optimizeTradelinesForClient, analyzeClientBehavior, batchOptimizeAll } from "./tradeline-processor";
 
 export type WorkflowType =
   | "auto_dispute" | "client_onboarding" | "score_monitoring"
   | "follow_up" | "letter_generation" | "compliance_check"
   | "report_pull" | "tradeline_review" | "collection_response"
   | "goodwill_campaign" | "bureau_escalation" | "client_graduation"
-  | "stale_dispute_check" | "payment_reminder" | "ai_analysis";
+  | "stale_dispute_check" | "payment_reminder" | "ai_analysis"
+  | "tradeline_optimization";
 
 export type TriggerType = "scheduled" | "event" | "manual" | "condition";
 export type RunStatus = "pending" | "running" | "completed" | "failed" | "skipped";
@@ -60,6 +62,7 @@ const WORKFLOW_DESCRIPTIONS: Record<WorkflowType, string> = {
   compliance_check: "Verify all active disputes meet CROA/FCRA compliance deadlines",
   report_pull: "Scheduled bureau report pulls for active clients",
   tradeline_review: "Review tradeline placements and report status to clients",
+  tradeline_optimization: "AI-driven batch tradeline optimization for all active clients",
   collection_response: "Auto-generate debt validation letters for new collections",
   goodwill_campaign: "Generate goodwill removal letters for clients with positive payment history",
   bureau_escalation: "Escalate unresolved disputes past 30 days to CFPB complaint",
@@ -285,6 +288,12 @@ export async function executeAutomationRule(ruleId: string): Promise<AutomationR
       }
       case "tradeline_review": {
         const outcome = await runTradelineReview();
+        processed = outcome.processed; succeeded = outcome.succeeded; failed = outcome.failed;
+        Object.assign(results, outcome.details);
+        break;
+      }
+      case "tradeline_optimization": {
+        const outcome = await runTradelineOptimization();
         processed = outcome.processed; succeeded = outcome.succeeded; failed = outcome.failed;
         Object.assign(results, outcome.details);
         break;
@@ -766,6 +775,53 @@ async function runTradelineReview(): Promise<WorkflowResult> {
   return { processed, succeeded, failed, details: { tradelinesReviewed: tradelines.length, issues } };
 }
 
+async function runTradelineOptimization(): Promise<WorkflowResult> {
+  let processed = 0, succeeded = 0, failed = 0;
+  const optimizations: any[] = [];
+
+  try {
+    const result = await batchOptimizeAll();
+    processed = result.processed;
+    succeeded = result.optimized;
+    failed = result.errors;
+
+    for (const r of result.results) {
+      if (r.status === "optimized" && r.recommendationCount > 0) {
+        try {
+          const behavior = await analyzeClientBehavior(r.clientId);
+          if (behavior && behavior.tradelineReadiness === "ready") {
+            await storage.createNotification({
+              type: "client",
+              title: `Tradeline Opportunity: ${r.clientName}`,
+              message: `AI found ${r.recommendationCount} tradeline matches with projected +${r.projectedImpact}pt score impact. ${r.message}`,
+              clientId: r.clientId,
+            });
+            optimizations.push({
+              clientId: r.clientId,
+              clientName: r.clientName,
+              recommendations: r.recommendationCount,
+              projectedImpact: r.projectedImpact,
+              readiness: behavior.tradelineReadiness,
+            });
+          }
+        } catch {}
+      }
+    }
+  } catch (err: any) {
+    failed++;
+  }
+
+  return {
+    processed,
+    succeeded,
+    failed,
+    details: {
+      clientsOptimized: optimizations.length,
+      optimizations,
+    },
+  };
+}
+
 async function runBureauEscalation(): Promise<WorkflowResult> {
   const disputes = await storage.getDisputes();
   const now = Date.now();
@@ -921,6 +977,15 @@ export async function seedDefaultRules(): Promise<number> {
       triggerType: "event",
       triggerConfig: { event: "collection_dispute_created" },
       actions: [{ type: "generate_validation", config: {}, order: 1 }],
+      enabled: true,
+    },
+    {
+      name: "AI Tradeline Optimization",
+      description: "Batch-analyze all active clients and recommend optimal AU tradeline placements based on credit behavior and partner inventory",
+      workflowType: "tradeline_optimization",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "batch_optimize", config: {}, order: 1 }, { type: "notify_opportunities", config: {}, order: 2 }],
       enabled: true,
     },
   ];

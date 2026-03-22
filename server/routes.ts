@@ -228,6 +228,91 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
+  app.post("/api/reports/pull", async (req, res) => {
+    try {
+      const { clientId, equifaxScore, experianScore, transunionScore, negativeItems, negativeItemsList, runAnalysis } = req.body;
+      if (!clientId) return res.status(400).json({ message: "Client ID required" });
+
+      const clients = await storage.getClients();
+      const client = clients.find((c: any) => c.id === clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const eqChange = equifaxScore && client.equifaxScore ? equifaxScore - client.equifaxScore : undefined;
+      const exChange = experianScore && client.experianScore ? experianScore - client.experianScore : undefined;
+      const tuChange = transunionScore && client.transunionScore ? transunionScore - client.transunionScore : undefined;
+
+      const report = await storage.createCreditReport({
+        clientId,
+        equifaxScore: equifaxScore || undefined,
+        experianScore: experianScore || undefined,
+        transunionScore: transunionScore || undefined,
+        equifaxChange: eqChange,
+        experianChange: exChange,
+        transunionChange: tuChange,
+        negativeItems: negativeItems || 0,
+        status: "pending",
+      });
+
+      const updateData: any = {};
+      if (equifaxScore) updateData.equifaxScore = equifaxScore;
+      if (experianScore) updateData.experianScore = experianScore;
+      if (transunionScore) updateData.transunionScore = transunionScore;
+      if (Object.keys(updateData).length > 0) {
+        await storage.updateClient(clientId, updateData);
+      }
+
+      let analysis = null;
+      if (runAnalysis) {
+        try {
+          analysis = await analyzeClientCredit({
+            clientName: `${client.firstName} ${client.lastName}`,
+            scores: { equifax: equifaxScore, experian: experianScore, transunion: transunionScore },
+            negativeItems: negativeItemsList || [],
+            goal: "Maximize score improvement",
+          });
+          await storage.updateCreditReport(report.id, { status: "analyzed", rawData: analysis });
+        } catch (aiErr) {
+          console.error("AI analysis failed:", aiErr);
+        }
+      }
+
+      await storage.createNotification({
+        type: "client",
+        title: "Credit Report Pulled",
+        message: `Report pulled for ${client.firstName} ${client.lastName} — EQ: ${equifaxScore || "N/A"}, EX: ${experianScore || "N/A"}, TU: ${transunionScore || "N/A"}`,
+        clientId,
+      });
+
+      res.status(201).json({ report, analysis });
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/api/reports/:id/analyze", async (req, res) => {
+    try {
+      const reports = await storage.getCreditReports();
+      const report = reports.find((r: any) => r.id === req.params.id);
+      if (!report) return res.status(404).json({ message: "Report not found" });
+
+      const clients = await storage.getClients();
+      const client = clients.find((c: any) => c.id === report.clientId);
+      const clientName = client ? `${client.firstName} ${client.lastName}` : "Unknown Client";
+
+      const analysis = await analyzeClientCredit({
+        clientName,
+        scores: {
+          equifax: report.equifaxScore ?? undefined,
+          experian: report.experianScore ?? undefined,
+          transunion: report.transunionScore ?? undefined,
+        },
+        negativeItems: req.body.negativeItems || [],
+        goal: req.body.goal || "Maximize score improvement",
+      });
+
+      await storage.updateCreditReport(req.params.id, { status: "analyzed", rawData: analysis });
+      res.json({ analysis });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ─── TRADELINES ────────────────────────────────────────────────────────────
   app.get("/api/tradelines", async (_req, res) => {
     try {

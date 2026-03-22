@@ -77,7 +77,9 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `server/usage-metering.ts` — Usage-based event tracking and billing (openmeterio/openmeter patterns) — tracks bureau pulls, disputes, AI calls, etc.
 - `server/trust-accounting.ts` — Double-entry trust accounting ledger with reconciliation (moov-io/accounts + CGAccounting patterns)
 - `client/src/pages/trust-accounting/index.tsx` — Trust Accounting page (3 tabs: Accounts, Ledger, Reconcile)
-- `client/src/pages/` — All 19 pages
+- `server/automation-engine.ts` — Full automation engine with 14 workflow types, scheduled runner, event-driven triggers, run history tracking
+- `client/src/pages/automation/index.tsx` — Automation page (3 tabs: Rules, Run History, Workflows) — create/toggle/execute automation rules
+- `client/src/pages/` — All 20 pages
 
 ## API Routes
 
@@ -151,6 +153,15 @@ GET          /api/usage/events (recent usage events)
 GET          /api/usage/client/:clientId (client usage history)
 GET          /api/usage/pricing (unit pricing table)
 POST         /api/usage/record (manually record usage event)
+GET          /api/automation/rules (list all automation rules)
+GET/POST     /api/automation/rules/:id (get/create/update automation rule)
+DELETE       /api/automation/rules/:id (delete automation rule)
+PATCH        /api/automation/rules/:id/toggle (enable/disable rule)
+POST         /api/automation/rules/:id/execute (manually run automation rule)
+GET          /api/automation/runs (run history)
+GET          /api/automation/stats (automation dashboard stats)
+GET          /api/automation/workflow-types (available workflow types)
+POST         /api/automation/seed (load default automation rules)
 POST         /api/calculator/loan (loan amortization + payment schedule)
 POST         /api/calculator/debt-payoff (avalanche/snowball debt payoff plan)
 POST         /api/calculator/repair-roi (credit repair investment ROI)

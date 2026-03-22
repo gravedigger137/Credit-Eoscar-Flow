@@ -44,6 +44,12 @@ import {
   getClientUsage, getRecentEvents, getPricing
 } from "./usage-metering";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
+import {
+  getAutomationRules, getAutomationRule, createAutomationRule, updateAutomationRule,
+  deleteAutomationRule, toggleAutomationRule, getAutomationRuns, getRunsForRule,
+  executeAutomationRule, getAutomationStats, getWorkflowTypes, seedDefaultRules, startScheduler,
+  dispatchEvent
+} from "./automation-engine";
 import { ZodError } from "zod";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -125,6 +131,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         clientId: client.id,
         read: false,
       });
+      dispatchEvent("client_created", { clientId: client.id }).catch(() => {});
       res.status(201).json(client);
     } catch (err) { handleError(res, err); }
   });
@@ -167,6 +174,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         clientId: dispute.clientId,
         read: false,
       });
+      recordUsageEvent({ eventType: "dispute_filed", clientId: dispute.clientId, metadata: { bureau: dispute.bureau }, quantity: 1 }).catch(() => {});
+      if (dispute.disputeType === "collection") {
+        dispatchEvent("collection_dispute_created", { disputeId: dispute.id }).catch(() => {});
+      }
       res.status(201).json(dispute);
     } catch (err) { handleError(res, err); }
   });
@@ -225,6 +236,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         disputeType,
       });
 
+      recordUsageEvent({ eventType: "dispute_letter_generated", clientId: dispute.clientId, metadata: { disputeId: dispute.id }, quantity: 1 }).catch(() => {});
       res.json({ letter, disputeId: dispute.id });
     } catch (err) { handleError(res, err); }
   });
@@ -862,6 +874,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Missing required fields" });
       }
       const letter = await generateDisputeLetter({ clientName, bureau, accountName, accountNumber, reason, type });
+      recordUsageEvent({ eventType: "ai_letter", metadata: { bureau }, quantity: 1 }).catch(() => {});
       res.json({ letter });
     } catch (e) { handleError(res, e); }
   });
@@ -872,6 +885,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { clientName, scores, negativeItems, goal } = req.body;
       if (!clientName) return res.status(400).json({ message: "clientName is required" });
       const analysis = await analyzeClientCredit({ clientName, scores: scores ?? {}, negativeItems: negativeItems ?? [], goal });
+      recordUsageEvent({ eventType: "ai_analysis", metadata: { clientName }, quantity: 1 }).catch(() => {});
       res.json({ analysis });
     } catch (e) { handleError(res, e); }
   });
@@ -882,6 +896,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { messages } = req.body;
       if (!messages || !Array.isArray(messages)) return res.status(400).json({ message: "messages array required" });
       const reply = await chatWithAI(messages);
+      recordUsageEvent({ eventType: "ai_chat", quantity: 1 }).catch(() => {});
       res.json({ reply });
     } catch (e) { handleError(res, e); }
   });
@@ -1124,6 +1139,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!factors || !factors.currentScore) return res.status(400).json({ message: "Score factors required" });
       if (!actions || !Array.isArray(actions)) return res.status(400).json({ message: "Actions array required" });
       const result = simulateScoreChanges(factors, actions);
+      recordUsageEvent({ eventType: "score_simulation", quantity: 1 }).catch(() => {});
       res.json(result);
     } catch (e) { handleError(res, e); }
   });
@@ -1134,6 +1150,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!factors || !factors.currentScore) return res.status(400).json({ message: "Score factors required" });
       const actions = generateRecommendations(factors);
       const simulation = simulateScoreChanges(factors, actions);
+      recordUsageEvent({ eventType: "score_simulation", quantity: 1 }).catch(() => {});
       res.json({ recommendations: actions, simulation });
     } catch (e) { handleError(res, e); }
   });
@@ -1515,6 +1532,85 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
+
+  // ─── AUTOMATION ENGINE ────────────────────────────────────────────────────
+
+  app.get("/api/automation/rules", async (_req, res) => {
+    try { res.json(await getAutomationRules()); } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/automation/rules/:id", async (req, res) => {
+    try {
+      const rule = await getAutomationRule(req.params.id);
+      if (!rule) return res.status(404).json({ message: "Rule not found" });
+      res.json(rule);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/automation/rules", async (req, res) => {
+    try {
+      const rule = await createAutomationRule(req.body);
+      res.status(201).json(rule);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.put("/api/automation/rules/:id", async (req, res) => {
+    try {
+      const rule = await updateAutomationRule(req.params.id, req.body);
+      res.json(rule);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/automation/rules/:id", async (req, res) => {
+    try {
+      await deleteAutomationRule(req.params.id);
+      res.json({ success: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/automation/rules/:id/toggle", async (req, res) => {
+    try {
+      const { enabled } = req.body;
+      const rule = await toggleAutomationRule(req.params.id, enabled);
+      res.json(rule);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/automation/rules/:id/execute", async (req, res) => {
+    try {
+      const run = await executeAutomationRule(req.params.id);
+      res.json(run);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/automation/runs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      res.json(await getAutomationRuns(limit));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/automation/rules/:id/runs", async (req, res) => {
+    try { res.json(await getRunsForRule(req.params.id)); } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/automation/stats", async (_req, res) => {
+    try { res.json(await getAutomationStats()); } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/automation/workflow-types", (_req, res) => {
+    res.json(getWorkflowTypes());
+  });
+
+  app.post("/api/automation/seed", async (_req, res) => {
+    try {
+      const count = await seedDefaultRules();
+      res.json({ seeded: count });
+    } catch (e) { handleError(res, e); }
+  });
+
+  seedDefaultRules().catch(() => {});
+  startScheduler();
 
   return httpServer;
 }

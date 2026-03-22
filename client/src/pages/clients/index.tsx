@@ -515,6 +515,103 @@ export default function Clients() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+            <DialogDescription>Update client info and credit scores.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <Label>First Name *</Label>
+              <Input value={editForm.firstName || ""} onChange={e => setEditForm((f: any) => ({ ...f, firstName: e.target.value }))} data-testid="input-edit-first-name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Last Name *</Label>
+              <Input value={editForm.lastName || ""} onChange={e => setEditForm((f: any) => ({ ...f, lastName: e.target.value }))} data-testid="input-edit-last-name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Email *</Label>
+              <Input value={editForm.email || ""} onChange={e => setEditForm((f: any) => ({ ...f, email: e.target.value }))} type="email" data-testid="input-edit-email" />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input value={editForm.phone || ""} onChange={e => setEditForm((f: any) => ({ ...f, phone: e.target.value }))} data-testid="input-edit-phone" />
+            </div>
+            <div className="space-y-2">
+              <Label>SSN</Label>
+              <Input value={editForm.ssn || ""} onChange={e => setEditForm((f: any) => ({ ...f, ssn: e.target.value }))} data-testid="input-edit-ssn" />
+            </div>
+            <div className="space-y-2">
+              <Label>Date of Birth</Label>
+              <Input value={editForm.dob || ""} onChange={e => setEditForm((f: any) => ({ ...f, dob: e.target.value }))} data-testid="input-edit-dob" />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Address</Label>
+              <Input value={editForm.address || ""} onChange={e => setEditForm((f: any) => ({ ...f, address: e.target.value }))} data-testid="input-edit-address" />
+            </div>
+            <div className="space-y-2">
+              <Label>City</Label>
+              <Input value={editForm.city || ""} onChange={e => setEditForm((f: any) => ({ ...f, city: e.target.value }))} data-testid="input-edit-city" />
+            </div>
+            <div className="space-y-2">
+              <Label>State</Label>
+              <Input value={editForm.state || ""} onChange={e => setEditForm((f: any) => ({ ...f, state: e.target.value }))} maxLength={2} data-testid="input-edit-state" />
+            </div>
+            <div className="space-y-2">
+              <Label>ZIP</Label>
+              <Input value={editForm.zip || ""} onChange={e => setEditForm((f: any) => ({ ...f, zip: e.target.value }))} data-testid="input-edit-zip" />
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={editForm.status || "onboarding"} onValueChange={v => setEditForm((f: any) => ({ ...f, status: v }))}>
+                <SelectTrigger data-testid="select-edit-status"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="onboarding">Onboarding</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2 border-t pt-4">
+              <p className="text-sm font-medium mb-3">Credit Scores</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Equifax</Label>
+                  <Input type="number" value={editForm.equifaxScore || ""} onChange={e => setEditForm((f: any) => ({ ...f, equifaxScore: e.target.value }))} placeholder="650" data-testid="input-edit-eq" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Experian</Label>
+                  <Input type="number" value={editForm.experianScore || ""} onChange={e => setEditForm((f: any) => ({ ...f, experianScore: e.target.value }))} placeholder="645" data-testid="input-edit-ex" />
+                </div>
+                <div className="space-y-2">
+                  <Label>TransUnion</Label>
+                  <Input type="number" value={editForm.transunionScore || ""} onChange={e => setEditForm((f: any) => ({ ...f, transunionScore: e.target.value }))} placeholder="655" data-testid="input-edit-tu" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                const { id, equifaxScore, experianScore, transunionScore, ...rest } = editForm;
+                const data = {
+                  ...rest,
+                  equifaxScore: equifaxScore ? parseInt(equifaxScore) : null,
+                  experianScore: experianScore ? parseInt(experianScore) : null,
+                  transunionScore: transunionScore ? parseInt(transunionScore) : null,
+                };
+                editMutation.mutate({ id, data });
+              }}
+              disabled={editMutation.isPending || !editForm.firstName || !editForm.lastName || !editForm.email}
+              data-testid="button-save-edit"
+            >
+              {editMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Shell>
   );
 }

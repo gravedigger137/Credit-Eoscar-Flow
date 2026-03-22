@@ -1021,13 +1021,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── CREDIT REPORT PARSER ROUTES ──────────────────────────────────────────
 
   app.post("/api/credit-report/parse", upload.single("file"), async (req: any, res) => {
+    const filePath = req.file?.path;
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-      const filePath = req.file.path;
-      const report = await parseCreditReportPDF(filePath);
-      fs.unlinkSync(filePath);
+      const report = await parseCreditReportPDF(filePath!);
       res.json(report);
     } catch (e) { handleError(res, e); }
+    finally { if (filePath && fs.existsSync(filePath)) try { fs.unlinkSync(filePath); } catch {} }
   });
 
   app.post("/api/credit-report/parse-text", async (req, res) => {
@@ -1114,13 +1114,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── CLIENT REPORT PARSE & AUTO-IMPORT ──────────────────────────────────────
 
   app.post("/api/clients/:id/parse-report", upload.single("file"), async (req: any, res) => {
+    const filePath = req.file?.path;
     try {
       const clientId = parseInt(req.params.id);
       const client = await storage.getClient(clientId);
       if (!client) return res.status(404).json({ message: "Client not found" });
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-      const report = await parseCreditReportPDF(req.file.path);
+      const report = await parseCreditReportPDF(filePath!);
 
       if (report.scores.equifax || report.scores.experian || report.scores.transunion) {
         const updates: any = {};
@@ -1130,14 +1131,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.updateClient(clientId, updates);
       }
 
-      fs.unlinkSync(req.file.path);
-
       res.json({
         success: true,
         report,
         message: `Parsed ${report.accounts.length} accounts, ${report.negativeItems.length} negative items from ${report.bureau} report`,
       });
     } catch (e) { handleError(res, e); }
+    finally { if (filePath && fs.existsSync(filePath)) try { fs.unlinkSync(filePath); } catch {} }
   });
 
 

@@ -64,7 +64,11 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `client/src/hooks/use-auth.tsx` — AuthProvider context and useAuth hook
 - `client/src/components/layout/Shell.tsx` — Sidebar with user info and logout
 - `client/src/pages/login/index.tsx` — Login/register page
-- `client/src/pages/` — All 15 pages
+- `server/credit-report-parser.ts` — PDF credit report parser (pdf-parse) — auto-extracts accounts, scores, negative items from EQ/EX/TU reports
+- `server/bureau-clients.ts` — Bureau API clients: EquifaxClient (@flexbase/equifax-node-client), ExperianClient (experian-node), TransUnionClient (TUNA XML)
+- `server/score-simulator.ts` — FICO score impact simulator — estimates score changes from repair actions (remove collection, pay down, add AU, etc.)
+- `client/src/pages/bureau/index.tsx` — Bureau & Score Simulator page (3 tabs: Report Parser, Score Simulator, Bureau APIs)
+- `client/src/pages/` — All 16 pages
 
 ## API Routes
 
@@ -103,6 +107,14 @@ POST         /api/ai/chat
 POST         /api/ai/dispute-letter
 POST         /api/ai/analyze-client
 POST         /api/ai/validate-metro2
+POST         /api/credit-report/parse (upload PDF → auto-extract accounts/scores)
+POST         /api/credit-report/parse-text (paste raw text → parse)
+POST         /api/bureau/pull-report (pull from EQ/EX/TU APIs)
+GET          /api/bureau/status (check which bureaus are configured)
+POST         /api/bureau/configure (save bureau API credentials)
+POST         /api/score-simulator/simulate (run score simulation)
+POST         /api/score-simulator/recommend (auto-recommend repair actions)
+POST         /api/clients/:id/parse-report (upload report + auto-update client scores)
 ```
 
 ## Environment Variables Required

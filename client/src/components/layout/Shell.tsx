@@ -1,6 +1,6 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database, Sparkles, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database, Sparkles, LogOut, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ const navigation = [
   { name: "Revolving Credit", href: "/credit-lines", icon: Wallet },
   { name: "Metro 2 Filings", href: "/metro2", icon: Database },
   { name: "Bureau Uploads", href: "/uploads", icon: Upload },
+  { name: "Bureau & Simulator", href: "/bureau", icon: Building2 },
   { name: "AI Command Center", href: "/ai", icon: Sparkles },
   { name: "Billing & Revenue", href: "/billing", icon: DollarSign },
   { name: "Inbox", href: "/notifications", icon: Bell },
@@ -74,7 +75,7 @@ export function AppSidebar() {
   );
 }
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({ children, title, subtitle }: { children: React.ReactNode; title?: string; subtitle?: string }) {
   const { user, logout } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -95,12 +96,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <header className="h-16 flex items-center justify-between px-6 border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
-              <div className="hidden md:flex items-center text-sm text-muted-foreground">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-success"></span>
-                  System Status: Operational
-                </span>
-              </div>
+              {title ? (
+                <div className="hidden md:flex flex-col">
+                  <span className="font-semibold text-sm">{title}</span>
+                  {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
+                </div>
+              ) : (
+                <div className="hidden md:flex items-center text-sm text-muted-foreground">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-success"></span>
+                    System Status: Operational
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <Link href="/notifications">

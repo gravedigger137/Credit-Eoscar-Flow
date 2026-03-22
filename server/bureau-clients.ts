@@ -219,12 +219,17 @@ export class TransUnionClient {
     this.apiKey = credentials.apiKey;
     this.memberId = credentials.memberId || "";
     this.baseUrl = credentials.environment === "production"
-      ? "https://netaccess-test.transunion.com"
+      ? "https://netaccess.transunion.com"
       : "https://netaccess-test.transunion.com";
+  }
+
+  private escapeXml(str: string): string {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   }
 
   async pullReport(request: BureauReportRequest): Promise<BureauReportResponse> {
     try {
+      const esc = this.escapeXml.bind(this);
       const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
 <creditBureau xmlns="http://www.transunion.com/namespace">
   <document>TUReportRequest</document>
@@ -233,7 +238,7 @@ export class TransUnionClient {
     <userRefNumber>CRP-${Date.now()}</userRefNumber>
     <subscriber>
       <industryCode>F</industryCode>
-      <memberCode>${this.memberId}</memberCode>
+      <memberCode>${esc(this.memberId)}</memberCode>
       <inquirySubscriberPrefixCode></inquirySubscriberPrefixCode>
     </subscriber>
   </transactionControl>
@@ -245,16 +250,16 @@ export class TransUnionClient {
         <indicative>
           <name>
             <person>
-              <first>${request.firstName}</first>
-              <last>${request.lastName}</last>
+              <first>${esc(request.firstName)}</first>
+              <last>${esc(request.lastName)}</last>
             </person>
           </name>
           <address>
-            <street><unparsed>${request.address}</unparsed></street>
-            <location><city>${request.city}</city><state>${request.state}</state><zipCode>${request.zip}</zipCode></location>
+            <street><unparsed>${esc(request.address)}</unparsed></street>
+            <location><city>${esc(request.city)}</city><state>${esc(request.state)}</state><zipCode>${esc(request.zip)}</zipCode></location>
           </address>
           <socialSecurity><number>${request.ssn.replace(/\D/g, "")}</number></socialSecurity>
-          <dateOfBirth>${request.dob}</dateOfBirth>
+          <dateOfBirth>${esc(request.dob)}</dateOfBirth>
         </indicative>
       </subjectRecord>
     </subject>

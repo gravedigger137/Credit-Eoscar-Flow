@@ -17,6 +17,9 @@ import {
   type Metro2JsonRecord,
 } from "./metro2";
 import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record } from "./ai";
+import { parseCreditReportPDF, parseCreditReportText } from "./credit-report-parser";
+import { pullAllBureauReports, getBureauClient } from "./bureau-clients";
+import { simulateScoreChanges, generateRecommendations, type ScoreFactors, type SimulationAction } from "./score-simulator";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
 
@@ -1011,6 +1014,129 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       await storage.deleteDocument(req.params.id);
       res.json({ success: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+
+  // ─── CREDIT REPORT PARSER ROUTES ──────────────────────────────────────────
+
+  app.post("/api/credit-report/parse", upload.single("file"), async (req: any, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      const filePath = req.file.path;
+      const report = await parseCreditReportPDF(filePath);
+      fs.unlinkSync(filePath);
+      res.json(report);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/credit-report/parse-text", async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) return res.status(400).json({ message: "No text provided" });
+      const report = parseCreditReportText(text);
+      res.json(report);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── BUREAU API ROUTES ──────────────────────────────────────────────────────
+
+  app.post("/api/bureau/pull-report", async (req, res) => {
+    try {
+      const { bureau, firstName, lastName, ssn, dob, address, city, state, zip } = req.body;
+      if (!firstName || !lastName || !ssn) {
+        return res.status(400).json({ message: "First name, last name, and SSN are required" });
+      }
+
+      if (bureau && ["equifax", "experian", "transunion"].includes(bureau)) {
+        const client = await getBureauClient(bureau);
+        if (!client) return res.status(400).json({ message: `${bureau} API not configured. Add credentials in Settings > Bureau APIs.` });
+        const report = await client.pullReport({ firstName, lastName, ssn, dob, address, city, state, zip });
+        return res.json(report);
+      }
+
+      const reports = await pullAllBureauReports({ firstName, lastName, ssn, dob, address, city, state, zip });
+      res.json(reports);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/bureau/status", async (_req, res) => {
+    try {
+      const bureaus = ["equifax", "experian", "transunion"] as const;
+      const status: Record<string, { configured: boolean; environment: string }> = {};
+      for (const b of bureaus) {
+        const key = await storage.getApiConfig(`${b}_api_key`);
+        const env = await storage.getApiConfig(`${b}_environment`) || "sandbox";
+        status[b] = { configured: !!key, environment: env };
+      }
+      res.json(status);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/bureau/configure", async (req, res) => {
+    try {
+      const { bureau, apiKey, apiSecret, clientId, memberId, environment } = req.body;
+      if (!bureau || !apiKey) return res.status(400).json({ message: "Bureau and API key required" });
+      if (!["equifax", "experian", "transunion"].includes(bureau)) return res.status(400).json({ message: "Invalid bureau" });
+
+      await storage.setApiConfig(`${bureau}_api_key`, apiKey);
+      if (apiSecret) await storage.setApiConfig(`${bureau}_api_secret`, apiSecret);
+      if (clientId) await storage.setApiConfig(`${bureau}_client_id`, clientId);
+      if (memberId) await storage.setApiConfig(`${bureau}_member_id`, memberId);
+      await storage.setApiConfig(`${bureau}_environment`, environment || "sandbox");
+
+      res.json({ success: true, message: `${bureau} credentials saved` });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── SCORE SIMULATOR ROUTES ─────────────────────────────────────────────────
+
+  app.post("/api/score-simulator/simulate", async (req, res) => {
+    try {
+      const { factors, actions } = req.body as { factors: ScoreFactors; actions: SimulationAction[] };
+      if (!factors || !factors.currentScore) return res.status(400).json({ message: "Score factors required" });
+      if (!actions || !Array.isArray(actions)) return res.status(400).json({ message: "Actions array required" });
+      const result = simulateScoreChanges(factors, actions);
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/score-simulator/recommend", async (req, res) => {
+    try {
+      const factors = req.body as ScoreFactors;
+      if (!factors || !factors.currentScore) return res.status(400).json({ message: "Score factors required" });
+      const actions = generateRecommendations(factors);
+      const simulation = simulateScoreChanges(factors, actions);
+      res.json({ recommendations: actions, simulation });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── CLIENT REPORT PARSE & AUTO-IMPORT ──────────────────────────────────────
+
+  app.post("/api/clients/:id/parse-report", upload.single("file"), async (req: any, res) => {
+    try {
+      const clientId = parseInt(req.params.id);
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+      if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+      const report = await parseCreditReportPDF(req.file.path);
+
+      if (report.scores.equifax || report.scores.experian || report.scores.transunion) {
+        const updates: any = {};
+        if (report.scores.equifax) updates.creditScoreEq = report.scores.equifax;
+        if (report.scores.experian) updates.creditScoreEx = report.scores.experian;
+        if (report.scores.transunion) updates.creditScoreTu = report.scores.transunion;
+        await storage.updateClient(clientId, updates);
+      }
+
+      fs.unlinkSync(req.file.path);
+
+      res.json({
+        success: true,
+        report,
+        message: `Parsed ${report.accounts.length} accounts, ${report.negativeItems.length} negative items from ${report.bureau} report`,
+      });
     } catch (e) { handleError(res, e); }
   });
 

@@ -3,16 +3,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   FileText, CheckCircle2, Clock, AlertTriangle, Download,
   RefreshCw, Send, Trash2, Eye, Filter, Building2,
-  FilePlus2, TrendingUp, Calendar
+  FilePlus2, TrendingUp, Calendar, Upload, ArrowRightLeft, Shield, Copy
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -51,6 +53,10 @@ export default function Metro2() {
   const [search, setSearch] = useState("");
   const [viewSubmission, setViewSubmission] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [convertResult, setConvertResult] = useState<any>(null);
+  const [convertTarget, setConvertTarget] = useState("metro2");
+  const [validateResult, setValidateResult] = useState<any>(null);
+  const converterFileRef = useRef<HTMLInputElement>(null);
 
   const { data: submissions = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/metro2"] });
   const { data: clients = [] } = useQuery<any[]>({ queryKey: ["/api/clients"] });
@@ -69,6 +75,45 @@ export default function Metro2() {
     },
     onError: () => toast({ title: "Failed to update", variant: "destructive" }),
   });
+
+  const convertMutation = useMutation({
+    mutationFn: async ({ file, targetFormat }: { file: File; targetFormat: string }) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("targetFormat", targetFormat);
+      const r = await fetch("/api/metro2/convert", { method: "POST", body: fd, credentials: "include" });
+      if (!r.ok) throw new Error("Conversion failed");
+      return r.json();
+    },
+    onSuccess: (data) => {
+      setConvertResult(data);
+      toast({ title: `Converted ${data.recordCount} record(s) to ${data.format} format!` });
+    },
+    onError: () => toast({ title: "Conversion failed", variant: "destructive" }),
+  });
+
+  const validateMutation = useMutation({
+    mutationFn: async (record: any) => {
+      const r = await apiRequest("POST", "/api/metro2/validate", { record });
+      return r.json();
+    },
+    onSuccess: (data) => {
+      setValidateResult(data);
+      toast({ title: data.valid ? "Record is valid!" : `Found ${data.errors.length} issue(s)`, variant: data.valid ? "default" : "destructive" });
+    },
+    onError: () => toast({ title: "Validation failed", variant: "destructive" }),
+  });
+
+  function downloadConvertedFile(content: string, format: string) {
+    const ext = format === "json" ? "json" : "dat";
+    const blob = new Blob([typeof content === "string" ? content : JSON.stringify(content, null, 2)], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `converted_${new Date().toISOString().slice(0, 10)}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   function downloadFile(s: any) {
     if (!s.fileContent) return toast({ title: "No file content saved", variant: "destructive" });
@@ -171,6 +216,153 @@ export default function Metro2() {
               </Card>
             );
           })}
+        </div>
+
+        {/* Document Converter & Validator */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card className="glass-panel">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-blue-500" /> Format Converter
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Convert files between Metro 2 (.DAT), JSON, and CSV formats
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label className="text-xs">Upload file (CSV, JSON, or Metro 2)</Label>
+                <input
+                  ref={converterFileRef}
+                  type="file"
+                  accept=".csv,.json,.dat,.txt,.metro2"
+                  className="block w-full text-xs text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                  data-testid="input-converter-file"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={convertTarget} onValueChange={setConvertTarget}>
+                  <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-convert-target">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="metro2">→ Metro 2</SelectItem>
+                    <SelectItem value="json">→ JSON</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const file = converterFileRef.current?.files?.[0];
+                    if (!file) return toast({ title: "Select a file first", variant: "destructive" });
+                    convertMutation.mutate({ file, targetFormat: convertTarget });
+                  }}
+                  disabled={convertMutation.isPending}
+                  data-testid="button-convert"
+                >
+                  {convertMutation.isPending ? "Converting..." : <><ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" /> Convert</>}
+                </Button>
+              </div>
+              {convertResult && (
+                <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-emerald-600">
+                      <CheckCircle2 className="w-3 h-3 inline mr-1" />
+                      {convertResult.recordCount} record(s) converted to {convertResult.format}
+                    </p>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => {
+                        const text = convertResult.content || JSON.stringify(convertResult.records, null, 2);
+                        navigator.clipboard.writeText(text);
+                        toast({ title: "Copied to clipboard!" });
+                      }}>
+                        <Copy className="w-3 h-3 mr-1" /> Copy
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => {
+                        downloadConvertedFile(convertResult.content || JSON.stringify(convertResult.records, null, 2), convertResult.format);
+                      }}>
+                        <Download className="w-3 h-3 mr-1" /> Save
+                      </Button>
+                    </div>
+                  </div>
+                  {convertResult.errors?.length > 0 && (
+                    <div className="text-[10px] text-amber-600">
+                      {convertResult.errors.map((e: string, i: number) => <p key={i}>⚠ {e}</p>)}
+                    </div>
+                  )}
+                  <pre className="text-[10px] font-mono text-muted-foreground max-h-32 overflow-auto whitespace-pre-wrap break-all bg-background/50 rounded p-2">
+                    {(convertResult.content || JSON.stringify(convertResult.records, null, 2)).substring(0, 2000)}
+                    {(convertResult.content || JSON.stringify(convertResult.records, null, 2)).length > 2000 && "\n... (truncated)"}
+                  </pre>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="glass-panel">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Shield className="w-4 h-4 text-emerald-500" /> CDIA Validator
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Validate Metro 2 records against CDIA compliance rules before submission
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Account #</Label>
+                  <Input id="val-acct" className="h-7 text-xs" placeholder="AU-00001" data-testid="input-val-acct" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Status Code</Label>
+                  <Input id="val-status" className="h-7 text-xs" placeholder="11" data-testid="input-val-status" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">ECOA Code</Label>
+                  <Input id="val-ecoa" className="h-7 text-xs" placeholder="3" data-testid="input-val-ecoa" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Account Type</Label>
+                  <Input id="val-type" className="h-7 text-xs" placeholder="18" data-testid="input-val-type" />
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  const record = {
+                    accountNumber: (document.getElementById("val-acct") as HTMLInputElement)?.value || "TEST-001",
+                    accountStatus: (document.getElementById("val-status") as HTMLInputElement)?.value || "11",
+                    ecoaCode: (document.getElementById("val-ecoa") as HTMLInputElement)?.value || "1",
+                    accountType: (document.getElementById("val-type") as HTMLInputElement)?.value || "18",
+                  };
+                  validateMutation.mutate(record);
+                }}
+                disabled={validateMutation.isPending}
+                data-testid="button-validate"
+              >
+                {validateMutation.isPending ? "Validating..." : <><Shield className="w-3.5 h-3.5 mr-1.5" /> Validate Record</>}
+              </Button>
+              {validateResult && (
+                <div className={`border rounded-lg p-3 space-y-1 ${validateResult.valid ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/10 border-red-500/30"}`}>
+                  <p className={`text-xs font-medium ${validateResult.valid ? "text-emerald-600" : "text-red-600"}`}>
+                    {validateResult.valid ? (
+                      <><CheckCircle2 className="w-3 h-3 inline mr-1" /> Record passes CDIA validation</>
+                    ) : (
+                      <><AlertTriangle className="w-3 h-3 inline mr-1" /> {validateResult.errors.length} issue(s) found</>
+                    )}
+                  </p>
+                  {validateResult.errors?.map((e: any, i: number) => (
+                    <p key={i} className={`text-[10px] ${e.severity === "error" ? "text-red-500" : "text-amber-500"}`}>
+                      {e.severity === "error" ? "✗" : "⚠"} <span className="font-medium">{e.field}:</span> {e.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Filters */}

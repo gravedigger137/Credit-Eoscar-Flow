@@ -10,7 +10,12 @@ import {
   insertTradelineSchema, insertCreditLineSchema, insertTransactionSchema,
   insertNotificationSchema, insertCardholderPartnerSchema, insertMetro2SubmissionSchema,
 } from "@shared/schema";
-import { buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES } from "./metro2";
+import {
+  buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES, ECOA_CODES, SPECIAL_COMMENT_CODES,
+  validateMetro2BaseRecord, parseMetro2File, convertCsvToJson, convertJsonToMetro2,
+  detectFormat, jsonToMetro2Record, metro2RecordToJson,
+  type Metro2JsonRecord,
+} from "./metro2";
 import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record } from "./ai";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
@@ -863,6 +868,83 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const result = await validateMetro2Record(record);
       res.json({ result });
     } catch (e) { handleError(res, e); }
+  });
+
+  // ─── METRO 2 FORMAT CONVERSION ──────────────────────────────────────────
+  app.post("/api/metro2/validate", async (req, res) => {
+    try {
+      const { record } = req.body;
+      if (!record) return res.status(400).json({ message: "record is required" });
+      const client = record.clientId ? await storage.getClient(record.clientId) : null;
+      const metro2Rec = {
+        client: client || { firstName: "TEST", lastName: "USER", ssn: "000000000" } as any,
+        accountNumber: record.accountNumber || "TEST-001",
+        portfolioType: record.portfolioType || "R",
+        accountType: record.accountType || "18",
+        accountStatus: record.accountStatus || "11",
+        ecoaCode: record.ecoaCode || "1",
+        creditLimit: record.creditLimit || 0,
+        currentBalance: record.currentBalance || 0,
+        dateOpened: record.dateOpened || new Date().toISOString().slice(0, 10),
+        dateOfAccountInfo: record.dateOfAccountInfo || new Date().toISOString().slice(0, 10),
+        dateClosed: record.dateClosed,
+        amountPastDue: record.amountPastDue || 0,
+        companyId: record.companyId || "CRP001",
+        paymentHistory: record.paymentHistory,
+        specialComment: record.specialComment,
+      };
+      const errors = validateMetro2BaseRecord(metro2Rec);
+      res.json({ valid: errors.filter(e => e.severity === "error").length === 0, errors });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/metro2/convert", upload.single("file"), async (req, res) => {
+    try {
+      let content = "";
+      let sourceFormat = req.body.sourceFormat as string || "";
+
+      if (req.file) {
+        content = fs.readFileSync(req.file.path, "utf-8");
+        fs.unlinkSync(req.file.path);
+      } else if (req.body.content) {
+        content = req.body.content;
+      } else {
+        return res.status(400).json({ message: "Provide a file upload or content in request body" });
+      }
+
+      if (!sourceFormat) sourceFormat = detectFormat(content);
+      const targetFormat = (req.body.targetFormat as string) || (sourceFormat === "metro2" ? "json" : "metro2");
+      const companyId = (req.body.companyId as string) || "CRP001";
+      const companyName = (req.body.companyName as string) || "CreditRepair Pro LLC";
+
+      if (sourceFormat === "metro2" && targetFormat === "json") {
+        const parsed = parseMetro2File(content);
+        res.json({ format: "json", records: parsed.records, recordCount: parsed.records.length, errors: parsed.errors });
+      } else if (sourceFormat === "json" && targetFormat === "metro2") {
+        const jsonRecords = JSON.parse(content) as Metro2JsonRecord[];
+        const metro2Content = convertJsonToMetro2(Array.isArray(jsonRecords) ? jsonRecords : [jsonRecords], companyId, companyName);
+        res.json({ format: "metro2", content: metro2Content, recordCount: Array.isArray(jsonRecords) ? jsonRecords.length : 1 });
+      } else if (sourceFormat === "csv" && targetFormat === "json") {
+        const result = convertCsvToJson(content);
+        res.json({ format: "json", records: result.records, recordCount: result.records.length, errors: result.errors });
+      } else if (sourceFormat === "csv" && targetFormat === "metro2") {
+        const csvResult = convertCsvToJson(content);
+        if (csvResult.records.length === 0) return res.status(400).json({ message: "No valid records found in CSV", errors: csvResult.errors });
+        const metro2Content = convertJsonToMetro2(csvResult.records as Metro2JsonRecord[], companyId, companyName);
+        res.json({ format: "metro2", content: metro2Content, recordCount: csvResult.records.length, errors: csvResult.errors });
+      } else {
+        res.status(400).json({ message: `Unsupported conversion: ${sourceFormat} → ${targetFormat}. Supported: metro2↔json, csv→json, csv→metro2` });
+      }
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/metro2/reference-codes", (_req, res) => {
+    res.json({
+      accountTypes: ACCOUNT_TYPES,
+      accountStatuses: ACCOUNT_STATUSES,
+      ecoaCodes: ECOA_CODES,
+      specialComments: SPECIAL_COMMENT_CODES,
+    });
   });
 
   // ─── CLIENT DOCUMENT UPLOAD ─────────────────────────────────────────────

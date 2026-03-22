@@ -35,7 +35,7 @@ A professional credit repair business management platform for credit repair agen
 - **Tradelines** — Manage authorized user tradeline placements and orders
 - **AU Partners** — Cardholder partner roster with slot tracking, credit limits, payout/price, reporting bureaus
 - **Revolving Credit / Credit Builders** — Enroll clients in builder loans, secured cards, revolving lines
-- **Metro 2 Filings** — CDIA-compliant Metro 2 file generator/downloader, submission log
+- **Metro 2 Filings** — Full CDIA-compliant Metro 2 engine (moov-io spec), 426-byte header/base/trailer records, format converter (CSV/JSON/Metro 2), CDIA validator, submission log
 - **Bureau Uploads** — Per-bureau tabs with drag-and-drop upload zone, direct portal links
 - **AI Command Center** — GPT-4o powered chat, dispute letter generator, client analysis, Metro 2 validator
 - **Billing** — Transaction ledger, Stripe Checkout integration, revenue tracking by service type

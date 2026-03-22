@@ -38,6 +38,7 @@ A professional credit repair business management platform for credit repair agen
 - **Metro 2 Filings** — Full CDIA-compliant Metro 2 engine (moov-io spec), 426-byte header/base/trailer records, format converter (CSV/JSON/Metro 2), CDIA validator, submission log
 - **Bureau Uploads** — Per-bureau tabs with drag-and-drop upload zone, direct portal links
 - **AI Command Center** — GPT-4o powered chat, dispute letter generator, client analysis, Metro 2 validator
+- **Post-Upload AI Pipeline** — When a credit report (PDF/XML/TXT) is uploaded for a client, the Consumer Credit Specialist AI automatically: 1) parses the report, 2) updates client scores, 3) analyzes every negative item with FCRA/FDCPA legal citations, 4) creates dispute letters for each item across all 3 bureaus. Manual trigger via `POST /api/clients/:id/auto-analyze`. Deduplication by creditor+bureau prevents duplicate disputes.
 - **Billing** — Transaction ledger, Stripe Checkout integration, revenue tracking by service type
 - **Inbox / Notifications** — Auto-generated alerts for disputes, payments, clients; live unread badge
 - **Compliance** — CROA/FCRA/FDCPA audit log, bureau contact directory (all 6 bureaus)

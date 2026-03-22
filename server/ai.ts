@@ -105,6 +105,176 @@ Answer questions concisely and professionally. When relevant, cite specific laws
   return resp.choices[0].message.content ?? "";
 }
 
+// ── Consumer Credit Specialist AI — Post-Upload Analysis & Auto-Dispute ──
+
+export interface NegativeItemAnalysis {
+  creditorName: string;
+  accountNumber: string;
+  accountType: string;
+  negativeReason: string;
+  balance: number | null;
+  bureau: string;
+  disputeType: "collection" | "inquiry" | "late_payment" | "charge_off" | "identity_theft" | "outdated" | "general";
+  disputeReason: string;
+  legalBasis: string;
+  removalProbability: "high" | "medium" | "low";
+  priorityScore: number;
+  strategy: string;
+}
+
+export interface CreditSpecialistReport {
+  clientName: string;
+  overallAssessment: string;
+  scoreAnalysis: string;
+  negativeItemAnalysis: NegativeItemAnalysis[];
+  recommendedDisputeOrder: string[];
+  estimatedTimeline: string;
+  additionalRecommendations: string[];
+}
+
+export async function analyzeReportForDisputes(params: {
+  clientName: string;
+  reportData: {
+    scores: { equifax: number | null; experian: number | null; transunion: number | null };
+    negativeItems: {
+      creditorName: string;
+      accountNumber: string;
+      accountType: string;
+      negativeReason: string | null;
+      currentBalance: number | null;
+      bureau: string;
+      paymentStatus: string;
+      dateOpened: string | null;
+      lastReported: string | null;
+      remarks: string[];
+    }[];
+    inquiries: { creditor: string; date: string; bureau: string }[];
+    publicRecords: { type: string; date: string; amount: number | null; status: string }[];
+    summary: {
+      totalAccounts: number;
+      negativeAccounts: number;
+      utilizationPercent: number;
+      inquiryCount: number;
+    };
+  };
+}): Promise<CreditSpecialistReport> {
+  const { clientName, reportData } = params;
+  const negItemsList = reportData.negativeItems
+    .map((item, i) => `${i + 1}. ${item.creditorName} (${item.accountType}) — ${item.negativeReason || "Derogatory"} — Balance: $${item.currentBalance || 0} — Bureau: ${item.bureau} — Status: ${item.paymentStatus}${item.dateOpened ? ` — Opened: ${item.dateOpened}` : ""}${item.lastReported ? ` — Last reported: ${item.lastReported}` : ""}${item.remarks.length ? ` — Remarks: ${item.remarks.join("; ")}` : ""}`)
+    .join("\n");
+
+  const inquiriesList = reportData.inquiries
+    .map((inq, i) => `${i + 1}. ${inq.creditor} — ${inq.date} (${inq.bureau})`)
+    .join("\n");
+
+  const publicRecordsList = reportData.publicRecords
+    .map((pr, i) => `${i + 1}. ${pr.type} — ${pr.date} — $${pr.amount || 0} — ${pr.status}`)
+    .join("\n");
+
+  const scoreStr = Object.entries(reportData.scores)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(", ") || "Not available";
+
+  const prompt = `You are a Consumer Credit Specialist AI with expertise in FCRA, FDCPA, CROA, UCC, and e-OSCAR dispute systems. You are analyzing a credit report to identify every disputable negative item and build an aggressive legal removal strategy.
+
+CLIENT: ${clientName}
+CREDIT SCORES: ${scoreStr}
+UTILIZATION: ${reportData.summary.utilizationPercent}%
+TOTAL ACCOUNTS: ${reportData.summary.totalAccounts} (${reportData.summary.negativeAccounts} negative)
+INQUIRIES: ${reportData.summary.inquiryCount}
+
+NEGATIVE ITEMS:
+${negItemsList || "None found"}
+
+HARD INQUIRIES:
+${inquiriesList || "None found"}
+
+PUBLIC RECORDS:
+${publicRecordsList || "None found"}
+
+For EACH negative item, provide a JSON analysis. Respond ONLY with valid JSON matching this exact schema:
+{
+  "overallAssessment": "2-3 sentence summary of credit standing and primary issues",
+  "scoreAnalysis": "Analysis of current scores and estimated improvement potential",
+  "items": [
+    {
+      "creditorName": "exact creditor name",
+      "accountNumber": "account number if available",
+      "accountType": "Collection|Credit Card|Auto Loan|etc",
+      "negativeReason": "what makes this item negative",
+      "balance": null or number,
+      "bureau": "equifax|experian|transunion|unknown",
+      "disputeType": "collection|inquiry|late_payment|charge_off|identity_theft|outdated|general",
+      "disputeReason": "specific legal reason for dispute — cite the exact FCRA/FDCPA section",
+      "legalBasis": "FCRA § 611(a)(1)|FDCPA § 809(b)|FCRA § 605|etc",
+      "removalProbability": "high|medium|low",
+      "priorityScore": 1-10 (10 = highest impact on score),
+      "strategy": "specific dispute strategy for this item"
+    }
+  ],
+  "recommendedDisputeOrder": ["creditor names in recommended filing order"],
+  "estimatedTimeline": "realistic timeline estimate",
+  "additionalRecommendations": ["list of credit-building actions to take alongside disputes"]
+}
+
+RULES:
+- Collections under $500 with no original contract → HIGH removal probability
+- Inquiries older than 1 year → MEDIUM removal probability
+- Late payments with any reporting inconsistency → HIGH removal probability
+- Charge-offs that were sold to collectors → dispute both original AND collector
+- Always cite the strongest applicable legal section
+- Prioritize items with highest score impact first
+- For e-OSCAR filing, include the ACDV reason code approach in strategy`;
+
+  const resp = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: 3000,
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+  });
+
+  const raw = resp.choices[0].message.content ?? "{}";
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {
+      clientName,
+      overallAssessment: "Unable to parse AI analysis. Please try again.",
+      scoreAnalysis: "",
+      negativeItemAnalysis: [],
+      recommendedDisputeOrder: [],
+      estimatedTimeline: "",
+      additionalRecommendations: [],
+    };
+  }
+
+  return {
+    clientName,
+    overallAssessment: parsed.overallAssessment || "",
+    scoreAnalysis: parsed.scoreAnalysis || "",
+    negativeItemAnalysis: (parsed.items || []).map((item: any) => ({
+      creditorName: item.creditorName || "",
+      accountNumber: item.accountNumber || "",
+      accountType: item.accountType || "Other",
+      negativeReason: item.negativeReason || "",
+      balance: item.balance ?? null,
+      bureau: item.bureau || "unknown",
+      disputeType: item.disputeType || "general",
+      disputeReason: item.disputeReason || "",
+      legalBasis: item.legalBasis || "",
+      removalProbability: item.removalProbability || "medium",
+      priorityScore: item.priorityScore || 5,
+      strategy: item.strategy || "",
+    })),
+    recommendedDisputeOrder: parsed.recommendedDisputeOrder || [],
+    estimatedTimeline: parsed.estimatedTimeline || "",
+    additionalRecommendations: parsed.additionalRecommendations || [],
+  };
+}
+
 // ── Metro 2 Validation ──────────────────────────────────────────────────────
 export async function validateMetro2Record(recordData: string) {
   const prompt = `You are a CDIA Metro 2 format compliance expert. Review this Metro 2 record and identify any issues.

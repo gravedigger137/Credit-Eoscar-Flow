@@ -16,7 +16,7 @@ import {
   detectFormat, jsonToMetro2Record, metro2RecordToJson,
   type Metro2JsonRecord,
 } from "./metro2";
-import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record } from "./ai";
+import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record, analyzeReportForDisputes } from "./ai";
 import { parseCreditReportPDF, parseCreditReportText } from "./credit-report-parser";
 import { pullAllBureauReports, getBureauClient } from "./bureau-clients";
 import { simulateScoreChanges, generateRecommendations, type ScoreFactors, type SimulationAction } from "./score-simulator";
@@ -1025,6 +1025,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           read: false,
         });
       } catch (_) {}
+
+      if (category === "credit_report" && /\.(pdf|xml|txt)$/i.test(file.originalname)) {
+        autoAnalyzeAndDispute(req.params.clientId, file.path, file.originalname).catch((err) => {
+          console.error("[Auto-Analyze] Background pipeline error:", err.message);
+        });
+      }
+
       res.json(doc);
     } catch (e) {
       if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
@@ -1160,7 +1167,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/clients/:id/parse-report", upload.single("file"), async (req: any, res) => {
     const filePath = req.file?.path;
     try {
-      const clientId = parseInt(req.params.id);
+      const clientId = req.params.id;
       const client = await storage.getClient(clientId);
       if (!client) return res.status(404).json({ message: "Client not found" });
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
@@ -1184,6 +1191,267 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     finally { if (filePath && fs.existsSync(filePath)) try { fs.unlinkSync(filePath); } catch {} }
   });
 
+
+  // ─── AUTO-ANALYZE & DISPUTE PIPELINE ─────────────────────────────────────
+
+  async function autoAnalyzeAndDispute(clientId: string, filePath: string, fileName: string) {
+    const client = await storage.getClient(clientId);
+    if (!client) return;
+
+    let report;
+    try {
+      if (/\.xml$/i.test(fileName)) {
+        const xml = fs.readFileSync(filePath, "utf-8");
+        const { parseXMLCreditReport } = await import("./credit-monitor");
+        const xmlData = parseXMLCreditReport(xml);
+        report = {
+          scores: { equifax: xmlData.score, experian: null, transunion: null },
+          negativeItems: (xmlData.accounts || []).filter((a: any) => a.isNegative).map((a: any) => ({
+            creditorName: a.creditorName || "Unknown",
+            accountNumber: a.accountNumber || "",
+            accountType: a.type || "Other",
+            negativeReason: "Derogatory",
+            currentBalance: a.balance || 0,
+            bureau: "unknown",
+            paymentStatus: a.status || "Unknown",
+            dateOpened: a.dateOpened || null,
+            lastReported: null,
+            remarks: [] as string[],
+          })),
+          inquiries: (xmlData.inquiries || []).map((i: any) => ({ creditor: i.creditor, date: i.date, bureau: i.type || "unknown" })),
+          publicRecords: [] as { type: string; date: string; amount: number | null; status: string }[],
+          summary: {
+            totalAccounts: xmlData.totalAccounts || 0,
+            negativeAccounts: xmlData.negativeAccounts || 0,
+            utilizationPercent: xmlData.totalCreditLimit > 0 ? Math.round((xmlData.totalBalance / xmlData.totalCreditLimit) * 100) : 0,
+            inquiryCount: xmlData.totalInquiries || 0,
+          },
+        };
+      } else if (/\.txt$/i.test(fileName)) {
+        const text = fs.readFileSync(filePath, "utf-8");
+        report = parseCreditReportText(text);
+      } else {
+        report = await parseCreditReportPDF(filePath);
+      }
+    } catch (err: any) {
+      await storage.createNotification({
+        type: "warning",
+        title: `Report Parse Failed: ${client.firstName} ${client.lastName}`,
+        message: `Could not parse "${fileName}": ${err.message}. Upload a clearer PDF or try the text parser.`,
+        clientId,
+      });
+      return;
+    }
+
+    recordUsageEvent({ eventType: "report_parsed", clientId, metadata: { format: fileName.split(".").pop(), automated: true }, quantity: 1 }).catch(() => {});
+
+    if (report.scores) {
+      const updates: any = {};
+      if (report.scores.equifax) updates.equifaxScore = report.scores.equifax;
+      if (report.scores.experian) updates.experianScore = report.scores.experian;
+      if (report.scores.transunion) updates.transunionScore = report.scores.transunion;
+      if (Object.keys(updates).length > 0) await storage.updateClient(clientId, updates);
+    }
+
+    const reportData = {
+      scores: report.scores,
+      negativeItems: (report.negativeItems || []).map((item: any) => ({
+        creditorName: item.creditorName || "Unknown",
+        accountNumber: item.accountNumber || "",
+        accountType: item.accountType || "Other",
+        negativeReason: item.negativeReason || item.negativeReason || null,
+        currentBalance: item.currentBalance || item.balance || null,
+        bureau: item.bureau || "unknown",
+        paymentStatus: item.paymentStatus || item.status || "Unknown",
+        dateOpened: item.dateOpened || null,
+        lastReported: item.lastReported || null,
+        remarks: item.remarks || [],
+      })),
+      inquiries: report.inquiries || [],
+      publicRecords: report.publicRecords || [],
+      summary: report.summary || { totalAccounts: 0, negativeAccounts: 0, utilizationPercent: 0, inquiryCount: 0 },
+    };
+
+    if (reportData.negativeItems.length === 0 && reportData.inquiries.length === 0) {
+      await storage.createNotification({
+        type: "success",
+        title: `Clean Report: ${client.firstName} ${client.lastName}`,
+        message: `Credit report "${fileName}" has no negative items. No disputes needed.`,
+        clientId,
+      });
+      return;
+    }
+
+    let specialistReport;
+    try {
+      specialistReport = await analyzeReportForDisputes({
+        clientName: `${client.firstName} ${client.lastName}`,
+        reportData,
+      });
+      recordUsageEvent({ eventType: "ai_analysis", clientId, metadata: { type: "credit_specialist", automated: true }, quantity: 1 }).catch(() => {});
+    } catch (err: any) {
+      await storage.createNotification({
+        type: "warning",
+        title: `AI Analysis Failed: ${client.firstName} ${client.lastName}`,
+        message: `Credit specialist AI could not analyze the report: ${err.message}`,
+        clientId,
+      });
+      return;
+    }
+
+    const existingDisputes = await storage.getDisputesByClient(clientId);
+    const disputedKeys = new Set(existingDisputes.map((d: any) => `${d.accountName?.toLowerCase()}::${d.bureau}`));
+
+    let disputesCreated = 0;
+    let disputesFailed = 0;
+    const sortedItems = [...specialistReport.negativeItemAnalysis].sort((a, b) => b.priorityScore - a.priorityScore);
+
+    const bureaus = ["equifax", "experian", "transunion"];
+
+    for (const item of sortedItems) {
+      for (const bureau of bureaus) {
+        const dedupeKey = `${item.creditorName.toLowerCase()}::${bureau}`;
+        if (disputedKeys.has(dedupeKey)) continue;
+
+        try {
+          const letter = generateFCRADisputeLetter({
+            clientName: `${client.firstName}${(client as any).middleName ? " " + (client as any).middleName : ""} ${client.lastName}${(client as any).suffix ? " " + (client as any).suffix : ""}`,
+            clientAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ") || undefined,
+            clientSSNLast4: (client as any).ssn ? (client as any).ssn.slice(-4) : undefined,
+            clientDOB: (client as any).dob || undefined,
+            bureau,
+            accountName: item.creditorName,
+            accountNumber: item.accountNumber || undefined,
+            reason: `${item.disputeReason} [${item.legalBasis}]`,
+            disputeType: item.disputeType,
+          });
+
+          await storage.createDispute({
+            clientId,
+            bureau,
+            accountName: item.creditorName,
+            accountNumber: item.accountNumber || undefined,
+            reason: `${item.disputeReason} [${item.legalBasis}]`,
+            status: "preparing",
+            disputeType: item.disputeType,
+            letterContent: letter,
+          });
+
+          recordUsageEvent({ eventType: "dispute_filed", clientId, metadata: { bureau, creditor: item.creditorName, automated: true }, quantity: 1 }).catch(() => {});
+          recordUsageEvent({ eventType: "dispute_letter_generated", clientId, metadata: { bureau, automated: true }, quantity: 1 }).catch(() => {});
+          disputesCreated++;
+          disputedKeys.add(dedupeKey);
+        } catch (err: any) {
+          disputesFailed++;
+          console.error(`[Auto-Dispute] Failed to create dispute for ${item.creditorName} (${bureau}):`, err.message);
+        }
+      }
+    }
+
+    const highItems = sortedItems.filter(i => i.removalProbability === "high").length;
+    const medItems = sortedItems.filter(i => i.removalProbability === "medium").length;
+
+    await storage.createNotification({
+      type: "success",
+      title: `Auto-Analysis Complete: ${client.firstName} ${client.lastName}`,
+      message: `Credit Specialist AI analyzed "${fileName}" — ${sortedItems.length} negative items found (${highItems} high removal probability, ${medItems} medium). Created ${disputesCreated} dispute letters with FCRA citations, ready for e-OSCAR submission.${disputesFailed > 0 ? ` ${disputesFailed} disputes failed to create.` : ""} ${specialistReport.estimatedTimeline}`,
+      clientId,
+    });
+  }
+
+  app.post("/api/clients/:clientId/auto-analyze", async (req, res) => {
+    try {
+      const client = await storage.getClient(req.params.clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const disputes = await storage.getDisputesByClient(req.params.clientId);
+
+      const negativeItems = disputes.map((d: any) => ({
+        creditorName: d.accountName,
+        accountNumber: d.accountNumber || "",
+        accountType: d.disputeType || "Other",
+        negativeReason: d.reason,
+        currentBalance: null,
+        bureau: d.bureau,
+        paymentStatus: d.status,
+        dateOpened: null,
+        lastReported: null,
+        remarks: [] as string[],
+      }));
+
+      const specialistReport = await analyzeReportForDisputes({
+        clientName: `${client.firstName} ${client.lastName}`,
+        reportData: {
+          scores: {
+            equifax: (client as any).equifaxScore ?? null,
+            experian: (client as any).experianScore ?? null,
+            transunion: (client as any).transunionScore ?? null,
+          },
+          negativeItems,
+          inquiries: [],
+          publicRecords: [],
+          summary: {
+            totalAccounts: disputes.length,
+            negativeAccounts: negativeItems.length,
+            utilizationPercent: 0,
+            inquiryCount: 0,
+          },
+        },
+      });
+
+      recordUsageEvent({ eventType: "ai_analysis", clientId: req.params.clientId, metadata: { type: "credit_specialist_manual" }, quantity: 1 }).catch(() => {});
+
+      const existingKeys = new Set(disputes.map((d: any) => `${d.accountName?.toLowerCase()}::${d.bureau}`));
+      let disputesCreated = 0;
+      let disputesFailed = 0;
+      const sorted = [...specialistReport.negativeItemAnalysis].sort((a, b) => b.priorityScore - a.priorityScore);
+
+      for (const item of sorted) {
+        for (const bureau of ["equifax", "experian", "transunion"]) {
+          const key = `${item.creditorName.toLowerCase()}::${bureau}`;
+          if (existingKeys.has(key)) continue;
+
+          try {
+            const letter = generateFCRADisputeLetter({
+              clientName: `${client.firstName} ${client.lastName}`,
+              clientAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ") || undefined,
+              clientSSNLast4: (client as any).ssn ? (client as any).ssn.slice(-4) : undefined,
+              clientDOB: (client as any).dob || undefined,
+              bureau,
+              accountName: item.creditorName,
+              accountNumber: item.accountNumber || undefined,
+              reason: `${item.disputeReason} [${item.legalBasis}]`,
+              disputeType: item.disputeType,
+            });
+
+            await storage.createDispute({
+              clientId: req.params.clientId,
+              bureau,
+              accountName: item.creditorName,
+              accountNumber: item.accountNumber || undefined,
+              reason: `${item.disputeReason} [${item.legalBasis}]`,
+              status: "preparing",
+              disputeType: item.disputeType,
+              letterContent: letter,
+            });
+
+            disputesCreated++;
+            existingKeys.add(key);
+          } catch {
+            disputesFailed++;
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        specialistReport,
+        disputesCreated,
+        disputesFailed,
+        message: `AI analyzed ${negativeItems.length} items, created ${disputesCreated} new dispute letters (${disputesFailed} failed) ready for e-OSCAR submission`,
+      });
+    } catch (e) { handleError(res, e); }
+  });
 
   // ─── CREDIT PREDICTOR ROUTES ─────────────────────────────────────────────
 

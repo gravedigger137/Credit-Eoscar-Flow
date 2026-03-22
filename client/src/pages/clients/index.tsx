@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
-import { Search, Plus, Mail, Phone, AlertTriangle, UserCheck, FileText, ShieldAlert, ClipboardList, Eye } from "lucide-react";
+import { Search, Plus, Mail, Phone, AlertTriangle, UserCheck, FileText, ShieldAlert, ClipboardList, Eye, Pencil } from "lucide-react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -39,6 +39,8 @@ export default function Clients() {
   const [pullForm, setPullForm] = useState(emptyPullForm);
   const [viewClient, setViewClient] = useState<any>(null);
   const [viewOpen, setViewOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
 
   const { data: clients = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/clients"] });
   const { data: reports = [] } = useQuery<any[]>({ queryKey: ["/api/reports"] });
@@ -62,6 +64,17 @@ export default function Clients() {
       qc.invalidateQueries({ queryKey: ["/api/clients"] });
       toast({ title: "Client removed." });
     },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/clients/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/clients"] });
+      setEditOpen(false);
+      setEditForm({});
+      toast({ title: "Client updated!" });
+    },
+    onError: () => toast({ title: "Error updating client", variant: "destructive" }),
   });
 
   const pullMutation = useMutation({
@@ -100,6 +113,27 @@ export default function Clients() {
   const handleViewClient = (client: any) => {
     setViewClient(client);
     setViewOpen(true);
+  };
+
+  const handleEditClient = (client: any) => {
+    setEditForm({
+      id: client.id,
+      firstName: client.firstName || "",
+      lastName: client.lastName || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      ssn: client.ssn || "",
+      dob: client.dob || "",
+      address: client.address || "",
+      city: client.city || "",
+      state: client.state || "",
+      zip: client.zip || "",
+      status: client.status || "onboarding",
+      equifaxScore: client.equifaxScore?.toString() || "",
+      experianScore: client.experianScore?.toString() || "",
+      transunionScore: client.transunionScore?.toString() || "",
+    });
+    setEditOpen(true);
   };
 
   const clientReports = (clientId: string) => reports.filter((r: any) => r.clientId === clientId);
@@ -322,6 +356,14 @@ export default function Clients() {
                               data-testid={`button-pull-report-${client.id}`}
                             >
                               <ClipboardList className="w-3.5 h-3.5 mr-1" /> Pull Report
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditClient(client)}
+                              data-testid={`button-edit-client-${client.id}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
                             </Button>
                             <Button
                               variant="ghost"

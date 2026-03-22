@@ -1,0 +1,115 @@
+
+repositories Search Results · ai for task
+Filter by
+Languages
+Advanced
+14.8k results
+ (229 ms)
+14.8k results
+
+amanaiproduct/personal-os
+Framework for a local AI agent powered task management system
+Python
+·
+390
+·
+Updated on Feb 11
+
+Skyscanner/aiotask-context
+Public archive
+Contextual information for asyncio tasks
+Python
+·
+159
+·
+Updated on May 25, 2023
+
+MatousMarik/AI
+Tasks for Artificial Intellegence 1 practicals at MFF, Charles University.
+Python
+·
+7
+·
+Updated on Dec 4, 2025
+
+Lightning-Universe/lightning-flash
+Public archive
+Your PyTorch AI Factory - Flash enables you to easily configure and run complex AI recipes for over 15 tasks across 7 data domains
+machine-learning
+deep-learning
+tabular-data
+pytorch
+classification
+Python
+·
+1.7k
+·
+Updated on Oct 8, 2023
+
+lmnr-ai/index
+Public archive
+The SOTA Open-Source Browser Agent for autonomously performing complex tasks on the web
+ai
+sota
+ai-agent
+browser-agent
+llm
+Python
+·
+2.3k
+·
+Updated on Jun 9, 2025
+
+Taskosaur/Taskosaur
+Open Source Project Management with Conversational AI Task Execution. Built for teams who want conversational workflow management alongsi…
+nodejs
+productivity
+typescript
+nextjs
+self-hosted
+TypeScript
+·
+437
+·
+Updated 2 days ago
+
+microsoft/malmo-challenge
+Task and example code for the Malmo Collaborative AI Challenge
+Python
+·
+156
+·
+Updated on Sep 23, 2022
+
+supervisely/supervisely
+Supervisely SDK for Python - convenient way to automate, customize and extend Supervisely Platform for your computer vision task
+python
+ai
+deep-learning
+neural-networks
+Python
+·
+522
+·
+Updated 2 days ago
+
+nxtg-ai/forge-orchestrator
+Forge Orchestrator: Multi-AI task orchestration. File locking, knowledge capture, drift detection. Rust.
+rust
+cli
+devops
+ai
+mcp
+Rust
+·
+104
+·
+Updated yesterday
+
+4regab/TaskSync
+Queue your prompts and give more tasks with human-in-the-loop workflows. TaskSync provides three options to integrate feedback loops into…
+TypeScript
+·
+571
+·
+Updated 8 days ago

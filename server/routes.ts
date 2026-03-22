@@ -63,12 +63,12 @@ const upload = multer({
       cb(null, unique + path.extname(file.originalname));
     },
   }),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".doc", ".docx", ".txt"];
+    const allowed = [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".doc", ".docx", ".txt", ".xml", ".csv", ".json", ".xlsx", ".xls", ".zip"];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowed.includes(ext)) cb(null, true);
-    else cb(new Error("File type not allowed. Accepted: PDF, images, Word docs, text files."));
+    else cb(new Error("File type not allowed. Accepted: PDF, images, Word docs, text, XML, CSV, JSON, Excel, ZIP."));
   },
 });
 

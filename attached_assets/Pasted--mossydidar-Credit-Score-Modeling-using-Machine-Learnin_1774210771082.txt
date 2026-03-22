@@ -1,0 +1,83 @@
+
+mossydidar/Credit-Score-Modeling-using-Machine-Learning
+Exploratory Data Analysis and Classification on some financial data to find out which clients default on their loans performed on the Hom…
+python
+finance
+machine-learning
+algorithms
+fintech
+Jupyter Notebook
+·
+3
+·
+Updated on Mar 8, 2020
+
+minump/Data-Challenge-Default-Credit-Card-Clients
+Data Challenge to find insights and predict the likelihood of default
+Jupyter Notebook
+·
+0
+·
+Updated on Feb 22, 2021
+
+Dhana958/Default-Credit-Card-Clients
+The model built here will use all possible factors to predict data on customers to find who are defaulters & non-defaulters next month.
+Jupyter Notebook
+·
+0
+·
+Updated on Feb 8, 2022
+
+mohitssharma89/Predictive-Analysis-to-find-default-Client
+Predictive analysis to find default clients from credit card payment dataset
+0
+·
+Updated on Mar 1, 2018
+
+dhruvgoe/ML_Algorithms_DefaultCreditCardClients
+A Python code in which Default Credit Card Client Dataset is used to implement different Machine Learning Classification Algorithms and m…
+Jupyter Notebook
+·
+1
+·
+Updated on Feb 5, 2024
+
+shashankg22/Default-of-Credit-Card-Clients
+The motivation of the project is to find a predictive model for banking system to detect if the credit card holder will make a payment or…
+Jupyter Notebook
+·
+1
+·
+Updated on Oct 15, 2020
+
+bonani98/Credit-EDA-Case-Study
+We are required to find out those clients which help in gaining business profit after lending loan.
+Jupyter Notebook
+·
+0
+·
+Updated on Jan 19, 2023
+
+dieudo/Credit-Card-Segmentation
+A segmentation problem! Using unsupervised learning to find groups based on clients credits transactions to serve them with incentives.
+Jupyter Notebook
+·
+0
+·
+Updated on Aug 18, 2020
+
+almengod/Endeudamiento-Crediticio
+The Wiesse bank wants to use ML methods to find whether their clients will have problems paying their loans or not
+Jupyter Notebook
+·
+0
+·
+Updated on Dec 4, 2023
+
+vin07sobral/credit-card-kaggle-challenge
+Kaggle Challenge - Simple analisys about a credit card dataset, to find out why the clients where cancelling their credit cards.
+Jupyter Notebook
+·
+0
+·
+Updated on Jun 8, 2021

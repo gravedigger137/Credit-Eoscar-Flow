@@ -93,7 +93,7 @@ export default function Bureau() {
   const [configForm, setConfigForm] = useState({ apiKey: "", apiSecret: "", clientId: "", memberId: "", environment: "sandbox" });
 
   const { data: bureauStatus } = useQuery<Record<string, { configured: boolean; environment: string }>>({
-    queryKey: ["/api/bureau/status"],
+    queryKey: ["/api/bureau/status-all"],
   });
 
   const parseMutation = useMutation({
@@ -492,15 +492,16 @@ export default function Bureau() {
 
         {/* ─── BUREAU APIS TAB ────────────────────────────────────────────────── */}
         <TabsContent value="bureaus" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {(["equifax", "experian", "transunion"] as const).map(bureau => {
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {(["equifax", "experian", "transunion", "innovis"] as const).map(bureau => {
               const status = bureauStatus?.[bureau];
-              const names: Record<string, string> = { equifax: "Equifax", experian: "Experian", transunion: "TransUnion" };
-              const colors: Record<string, string> = { equifax: "text-red-500", experian: "text-blue-500", transunion: "text-cyan-500" };
+              const names: Record<string, string> = { equifax: "Equifax", experian: "Experian", transunion: "TransUnion", innovis: "CBC/Innovis" };
+              const colors: Record<string, string> = { equifax: "text-red-500", experian: "text-blue-500", transunion: "text-cyan-500", innovis: "text-purple-500" };
               const descriptions: Record<string, string> = {
                 equifax: "@flexbase/equifax-node-client — OAuth2 credit report pull via Equifax API Developer Portal",
                 experian: "experian-node — Official Experian REST API for consumer credit profiles",
-                transunion: "TransUnion TUNA XML API — Direct XML credit report pull via Net Access",
+                transunion: "TransUnion TUNA XML API — Direct XML credit report pull via Net Access (shaynaostlund1985/transunion-php spec)",
+                innovis: "CBC/Innovis MISMO XML API — 4th bureau merge report pull (webmaxllc/cbc-client spec)",
               };
               return (
                 <Card key={bureau}>
@@ -542,7 +543,7 @@ export default function Bureau() {
               <CardTitle className="flex items-center gap-2"><Info className="w-5 h-5" /> Bureau API Setup Guide</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="space-y-2">
                   <h4 className="font-semibold text-red-500">Equifax</h4>
                   <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
@@ -564,10 +565,19 @@ export default function Bureau() {
                 <div className="space-y-2">
                   <h4 className="font-semibold text-cyan-500">TransUnion</h4>
                   <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
-                    <li>Apply through a TransUnion reseller or direct partnership</li>
+                    <li>Apply through a TransUnion reseller or direct</li>
                     <li>Receive Member Code and API Key</li>
-                    <li>Uses XML-based TUNA API (not REST)</li>
-                    <li>Requires signed agreement and compliance review</li>
+                    <li>Uses XML-based TUNA API (shaynaostlund1985 spec)</li>
+                    <li>Requires SSL cert auth + signed agreement</li>
+                  </ol>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-purple-500">CBC / Innovis</h4>
+                  <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
+                    <li>Apply at <span className="font-mono text-xs">cbcinnovis.com</span></li>
+                    <li>Get Subscriber ID and API Password</li>
+                    <li>Uses MISMO 2.3.1 XML format (webmaxllc spec)</li>
+                    <li>Supports 4-bureau merge reports</li>
                   </ol>
                 </div>
               </div>
@@ -591,8 +601,8 @@ export default function Bureau() {
             {(configBureau === "experian" || configBureau === "equifax") && (
               <div><Label>Client ID</Label><Input value={configForm.clientId} onChange={e => setConfigForm(f => ({ ...f, clientId: e.target.value }))} /></div>
             )}
-            {configBureau === "transunion" && (
-              <div><Label>Member Code</Label><Input value={configForm.memberId} onChange={e => setConfigForm(f => ({ ...f, memberId: e.target.value }))} /></div>
+            {(configBureau === "transunion" || configBureau === "innovis") && (
+              <div><Label>{configBureau === "innovis" ? "Subscriber ID" : "Member Code"}</Label><Input value={configForm.memberId} onChange={e => setConfigForm(f => ({ ...f, memberId: e.target.value }))} /></div>
             )}
             <div>
               <Label>Environment</Label>

@@ -22,6 +22,7 @@ import Partners from "@/pages/partners";
 import Metro2 from "@/pages/metro2";
 import AIPage from "@/pages/ai";
 import Bureau from "@/pages/bureau";
+import Analytics from "@/pages/analytics";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -53,6 +54,7 @@ function Router() {
       <Route path="/metro2">{() => <ProtectedRoute component={Metro2} />}</Route>
       <Route path="/ai">{() => <ProtectedRoute component={AIPage} />}</Route>
       <Route path="/bureau">{() => <ProtectedRoute component={Bureau} />}</Route>
+      <Route path="/analytics">{() => <ProtectedRoute component={Analytics} />}</Route>
       <Route path="/billing">{() => <ProtectedRoute component={Billing} />}</Route>
       <Route path="/notifications">{() => <ProtectedRoute component={Notifications} />}</Route>
       <Route path="/compliance">{() => <ProtectedRoute component={Compliance} />}</Route>

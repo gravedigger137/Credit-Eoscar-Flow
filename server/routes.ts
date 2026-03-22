@@ -20,6 +20,16 @@ import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2R
 import { parseCreditReportPDF, parseCreditReportText } from "./credit-report-parser";
 import { pullAllBureauReports, getBureauClient } from "./bureau-clients";
 import { simulateScoreChanges, generateRecommendations, type ScoreFactors, type SimulationAction } from "./score-simulator";
+import { analyzeCreditFactors, type CreditFactorInput } from "./credit-predictor";
+import {
+  getSalesReport, getClientFinancialSummary, getRevenueForecasting,
+  createCreditSale, getCreditSales, recordCreditSalePayment,
+  saveCreditFactorSnapshot, getCreditFactorHistory
+} from "./financial-reports";
+import {
+  detectScoreChanges, createAlertsAsNotifications, getClientScoreHistory,
+  getMonitoringConfig, setMonitoringConfig, parseXMLCreditReport
+} from "./credit-monitor";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
 
@@ -1077,7 +1087,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { bureau, apiKey, apiSecret, clientId, memberId, environment } = req.body;
       if (!bureau || !apiKey) return res.status(400).json({ message: "Bureau and API key required" });
-      if (!["equifax", "experian", "transunion"].includes(bureau)) return res.status(400).json({ message: "Invalid bureau" });
+      if (!["equifax", "experian", "transunion", "innovis"].includes(bureau)) return res.status(400).json({ message: "Invalid bureau" });
 
       await storage.setApiConfig(`${bureau}_api_key`, apiKey);
       if (apiSecret) await storage.setApiConfig(`${bureau}_api_secret`, apiSecret);
@@ -1138,6 +1148,166 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     } catch (e) { handleError(res, e); }
     finally { if (filePath && fs.existsSync(filePath)) try { fs.unlinkSync(filePath); } catch {} }
+  });
+
+
+  // ─── CREDIT PREDICTOR ROUTES ─────────────────────────────────────────────
+
+  app.post("/api/credit-predictor/analyze", async (req, res) => {
+    try {
+      const input = req.body as CreditFactorInput;
+      if (!input || input.totalAccounts === undefined) return res.status(400).json({ message: "Credit factor input required" });
+      const analysis = analyzeCreditFactors(input);
+      res.json(analysis);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/credit-predictor/analyze-client/:id", async (req, res) => {
+    try {
+      const clientId = req.params.id;
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+      const input = req.body as CreditFactorInput;
+      const analysis = analyzeCreditFactors(input);
+
+      await saveCreditFactorSnapshot(clientId, {
+        creditCardUtilization: input.creditCardUtilization,
+        paymentHistoryScore: Math.round((input.onTimePayments / Math.max(input.totalPayments, 1)) * 100),
+        derogatoryMarks: input.derogatoryMarks,
+        creditAgeMonths: input.creditAgeMonths,
+        totalAccounts: input.totalAccounts,
+        hardInquiries: input.hardInquiries,
+        totalBalance: input.totalBalance,
+        totalCreditLimit: input.totalCreditLimit,
+        collectionsCount: input.collectionsCount,
+        publicRecords: input.publicRecords,
+        onTimePayments: input.onTimePayments,
+        totalPayments: input.totalPayments,
+        overallScore: analysis.predictedScore,
+        predictedScore30d: analysis.predictions.days30,
+        predictedScore90d: analysis.predictions.days90,
+        predictedScore180d: analysis.predictions.days180,
+      });
+
+      res.json(analysis);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/credit-factors/:clientId/history", async (req, res) => {
+    try {
+      const history = await getCreditFactorHistory(req.params.clientId);
+      res.json(history);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── FINANCIAL REPORTS ROUTES ──────────────────────────────────────────────
+
+  app.get("/api/financial-reports/sales", async (req, res) => {
+    try {
+      const period = (req.query.period as string) || "monthly";
+      if (!["daily", "weekly", "monthly", "yearly"].includes(period)) return res.status(400).json({ message: "Invalid period" });
+      const report = await getSalesReport(period as any);
+      res.json(report);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/financial-reports/client/:id", async (req, res) => {
+    try {
+      const summary = await getClientFinancialSummary(req.params.id);
+      if (!summary) return res.status(404).json({ message: "Client not found" });
+      res.json(summary);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/financial-reports/forecast", async (_req, res) => {
+    try {
+      const forecast = await getRevenueForecasting();
+      res.json(forecast);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── CREDIT SALES (POS) ROUTES ─────────────────────────────────────────────
+
+  app.get("/api/credit-sales", async (req, res) => {
+    try {
+      const clientId = req.query.clientId as string | undefined;
+      const sales = await getCreditSales(clientId);
+      res.json(sales);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/credit-sales", async (req, res) => {
+    try {
+      const { clientId, description, amount, creditTerms, dueDate, notes } = req.body;
+      if (!clientId || !description || !amount) return res.status(400).json({ message: "Client, description, and amount required" });
+      const sale = await createCreditSale({ clientId, description, amount: Math.round(amount), creditTerms, dueDate, notes });
+      res.json(sale);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/credit-sales/:id/payment", async (req, res) => {
+    try {
+      const { amount } = req.body;
+      if (!amount) return res.status(400).json({ message: "Payment amount required" });
+      const sale = await recordCreditSalePayment(req.params.id, Math.round(amount));
+      if (!sale) return res.status(404).json({ message: "Credit sale not found" });
+      res.json(sale);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── BUREAU CONFIG (Innovis/CBC) ───────────────────────────────────────────
+
+  // ─── CREDIT MONITORING ROUTES ─────────────────────────────────────────────
+
+  app.get("/api/credit-monitor/config", async (_req, res) => {
+    try {
+      const config = await getMonitoringConfig();
+      res.json(config);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/credit-monitor/config", async (req, res) => {
+    try {
+      const config = await setMonitoringConfig(req.body);
+      res.json(config);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/credit-monitor/scan", async (_req, res) => {
+    try {
+      const alerts = await detectScoreChanges();
+      const created = await createAlertsAsNotifications(alerts);
+      res.json({ alerts, notificationsCreated: created });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/credit-monitor/history/:clientId", async (req, res) => {
+    try {
+      const history = await getClientScoreHistory(req.params.clientId);
+      res.json(history);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/credit-report/parse-xml", async (req, res) => {
+    try {
+      const { xml } = req.body;
+      if (!xml) return res.status(400).json({ message: "XML content required" });
+      const parsed = parseXMLCreditReport(xml);
+      res.json(parsed);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/bureau/status-all", async (_req, res) => {
+    try {
+      const bureaus = ["equifax", "experian", "transunion", "innovis"] as const;
+      const status: Record<string, { configured: boolean; environment: string }> = {};
+      for (const b of bureaus) {
+        const key = await storage.getApiConfig(`${b}_api_key`);
+        const env = await storage.getApiConfig(`${b}_environment`) || "sandbox";
+        status[b] = { configured: !!key, environment: env };
+      }
+      res.json(status);
+    } catch (e) { handleError(res, e); }
   });
 
 

@@ -1,0 +1,92 @@
+
+sanda0/CGAccounting
+CGAccounting is a Laravel package for handling accounting operations, including account management, transactions, and generating financial …
+finance
+laravel
+accounting
+laravel-package
+composer-package
+PHP
+·
+3
+·
+Updated on Jan 28
+
+natalie-abbie/iReport
+The iReporter api enables users to register and login to the platform with their correct creditials inorder to report a redf flag or an i…
+HTML
+·
+0
+·
+Updated on Jan 13, 2019
+
+sivanbecker/creditParserV3
+This project is a Node.js + TypeScript backend for tracking credit-card expenses. It exposes a JSON REST API and (later) a CLI that can i…
+TypeScript
+·
+0
+·
+Updated 2 days ago
+
+sevenkushal/gen-ai-credit-risk
+Developed a Logistic Regression-based credit risk model achieving an 80% prediction accuracy for customer loan default probability. Incor…
+Jupyter Notebook
+·
+0
+·
+Updated on Sep 16, 2024
+
+StonishVicer/creditexpress-front
+creditexpress-front is the frontend application for the CreditExpress loan management system, built with NuxtUI (Vue), Tailwind CSS, and …
+TypeScript
+·
+0
+·
+Updated on Dec 13, 2025
+
+psrikanthm/expense-report
+Parse and categorize monthly bank, credit card statements into expense categories. Categorization is done using keyword rules, or local L…
+personal-finance
+expense-tracker
+monthly-reporting
+lm-studio
+google-maps-mcp-server
+Python
+·
+0
+·
+Updated 5 days ago
+
+vipin1143/credit_scoring_project
+An end-to-end credit scoring application with an interactive Streamlit dashboard and a Flask API backend. It predicts loan eligibility ba…
+Jupyter Notebook
+·
+0
+·
+Updated on Aug 8, 2025
+
+floreantpos/Floreant-POS
+pull, Credit card reports. * Will run in either Single PC system or client server mode. Lower database footprint for Apache Derby, Java …
+6
+·
+Updated on Nov 14, 2009
+
+Adityaiyer3004/Adityaiyer3004-AI-Credit-Card-Fraud-Detection
+A fraud detection system combining Deep Learning (Focal Loss) & GPT-4 to detect fraud and generate AI-powered reports. Features ML prepro…
+Jupyter Notebook
+·
+1
+·
+Updated on Mar 6, 2025
+
+vietvo371/AgriMRV
+Transparent carbon MRV platform for smallholder farmers to turn sustainable practices into carbon credits and green financing. Laravel ba…
+laravel
+react-native
+blockchain
+ai-agents
+TypeScript
+·
+0
+·
+Updated on Sep 3, 2025

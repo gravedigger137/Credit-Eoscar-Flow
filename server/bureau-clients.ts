@@ -292,9 +292,77 @@ export class TransUnionClient {
   }
 }
 
+// ─── CBC / INNOVIS CLIENT ───────────────────────────────────────────────────
+// Based on webmaxllc/cbc-client — CBC Innovis Credit Report API Client
+
+export class CBCInnovisClient {
+  private apiKey: string;
+  private subscriberId: string;
+  private baseUrl: string;
+
+  constructor(credentials: BureauCredentials) {
+    this.apiKey = credentials.apiKey;
+    this.subscriberId = credentials.memberId || "";
+    this.baseUrl = credentials.environment === "production"
+      ? "https://api.cbcinnovis.com"
+      : "https://api-sandbox.cbcinnovis.com";
+  }
+
+  private escapeXml(str: string): string {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  }
+
+  async pullReport(request: BureauReportRequest): Promise<BureauReportResponse> {
+    try {
+      const esc = this.escapeXml.bind(this);
+      const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
+<REQUEST_GROUP MISMOVersionID="2.3.1">
+  <REQUESTING_PARTY _Name="CreditRepairPro" _StreetAddress="" _City="" _State="" _PostalCode="" _Identifier="${esc(this.subscriberId)}" />
+  <SUBMITTING_PARTY _Name="CreditRepairPro" _StreetAddress="" _City="" _State="" _PostalCode="" _Identifier="${esc(this.subscriberId)}" />
+  <REQUEST LoginAccountIdentifier="${esc(this.subscriberId)}" LoginAccountPassword="${esc(this.apiKey)}" InternalAccountIdentifier="CRP-${Date.now()}">
+    <REQUEST_DATA>
+      <CREDIT_REQUEST MISMOVersionID="2.3.1" _RequestType="Individual" CreditReportRequestActionType="Submit" CreditReportType="Merge" CreditRequestDateTime="${new Date().toISOString()}">
+        <CREDIT_REQUEST_DATA CreditReportMergeType="FairIsaac" CreditReportRequestActionType="Submit" CreditReportType="Merge" CreditRequestType="Individual" BorrowerID="Borrower1">
+          <CREDIT_REPOSITORY_INCLUDED _EquifaxIndicator="Y" _ExperianIndicator="Y" _TransUnionIndicator="Y" _CBCInnovisIndicator="Y" />
+        </CREDIT_REQUEST_DATA>
+        <BORROWER BorrowerID="Borrower1" _PrintPositionType="Borrower" _FirstName="${esc(request.firstName)}" _LastName="${esc(request.lastName)}" _SSN="${request.ssn.replace(/\D/g, "")}" _BirthDate="${esc(request.dob)}">
+          <_RESIDENCE _StreetAddress="${esc(request.address)}" _City="${esc(request.city)}" _State="${esc(request.state)}" _PostalCode="${esc(request.zip)}" BorrowerResidencyType="Current" />
+        </BORROWER>
+      </CREDIT_REQUEST>
+    </REQUEST_DATA>
+  </REQUEST>
+</REQUEST_GROUP>`;
+
+      const response = await fetch(`${this.baseUrl}/services/UCDPService`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/xml",
+          "Authorization": `Basic ${Buffer.from(`${this.subscriberId}:${this.apiKey}`).toString("base64")}`,
+        },
+        body: xmlBody,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        return { bureau: "innovis" as any, score: null, reportId: "", rawData: errText, success: false, error: `CBC/Innovis API error: ${response.status}` };
+      }
+
+      const rawData = await response.text();
+      const scoreMatch = rawData.match(/_Value="(\d{3})"/i);
+      const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
+      const reportIdMatch = rawData.match(/CreditReportIdentifier="([^"]+)"/i);
+      const reportId = reportIdMatch ? reportIdMatch[1] : `CBC-${Date.now()}`;
+
+      return { bureau: "innovis" as any, score, reportId, rawData, success: true, error: null };
+    } catch (e: any) {
+      return { bureau: "innovis" as any, score: null, reportId: "", rawData: "", success: false, error: e.message };
+    }
+  }
+}
+
 // ─── FACTORY ────────────────────────────────────────────────────────────────
 
-export async function getBureauClient(bureau: "equifax" | "experian" | "transunion"): Promise<EquifaxClient | ExperianClient | TransUnionClient | null> {
+export async function getBureauClient(bureau: "equifax" | "experian" | "transunion" | "innovis"): Promise<EquifaxClient | ExperianClient | TransUnionClient | CBCInnovisClient | null> {
   const apiKey = await storage.getApiConfig(`${bureau}_api_key`);
   if (!apiKey) return null;
 
@@ -309,13 +377,14 @@ export async function getBureauClient(bureau: "equifax" | "experian" | "transuni
     case "equifax": return new EquifaxClient(creds);
     case "experian": return new ExperianClient(creds);
     case "transunion": return new TransUnionClient(creds);
+    case "innovis": return new CBCInnovisClient(creds);
   }
 }
 
 export async function pullAllBureauReports(request: BureauReportRequest): Promise<BureauReportResponse[]> {
   const results: BureauReportResponse[] = [];
 
-  for (const bureau of ["equifax", "experian", "transunion"] as const) {
+  for (const bureau of ["equifax", "experian", "transunion", "innovis"] as const) {
     const client = await getBureauClient(bureau);
     if (client) {
       const report = await client.pullReport(request);

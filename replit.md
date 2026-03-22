@@ -67,8 +67,11 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `server/credit-report-parser.ts` — PDF credit report parser (pdf-parse) — auto-extracts accounts, scores, negative items from EQ/EX/TU reports
 - `server/bureau-clients.ts` — Bureau API clients: EquifaxClient (@flexbase/equifax-node-client), ExperianClient (experian-node), TransUnionClient (TUNA XML)
 - `server/score-simulator.ts` — FICO score impact simulator — estimates score changes from repair actions (remove collection, pay down, add AU, etc.)
-- `client/src/pages/bureau/index.tsx` — Bureau & Score Simulator page (3 tabs: Report Parser, Score Simulator, Bureau APIs)
-- `client/src/pages/` — All 16 pages
+- `server/credit-predictor.ts` — 6-factor FICO credit score predictor with approval odds (rishabhpahuja/Credit-Score- model)
+- `server/financial-reports.ts` — Sales reports, revenue forecasting, credit sales POS, credit factor snapshots (priyaranjan756/Creditshelf + francheska-guzman/credit-report patterns)
+- `client/src/pages/bureau/index.tsx` — Bureau & Score Simulator page (3 tabs: Report Parser, Score Simulator, Bureau APIs) — 4 bureaus: EQ/EX/TU + CBC/Innovis
+- `client/src/pages/analytics/index.tsx` — Financial Analytics page (4 tabs: Credit Predictor, Sales Reports, Revenue Forecast, Credit Sales POS)
+- `client/src/pages/` — All 17 pages
 
 ## API Routes
 
@@ -115,6 +118,19 @@ POST         /api/bureau/configure (save bureau API credentials)
 POST         /api/score-simulator/simulate (run score simulation)
 POST         /api/score-simulator/recommend (auto-recommend repair actions)
 POST         /api/clients/:id/parse-report (upload report + auto-update client scores)
+POST         /api/credit-predictor/analyze (6-factor creditworthiness prediction)
+POST         /api/credit-predictor/analyze-client/:id (predict + save snapshot)
+GET          /api/credit-factors/:clientId/history (factor history over time)
+GET          /api/financial-reports/sales?period=monthly (sales report by period)
+GET          /api/financial-reports/client/:id (client financial summary)
+GET          /api/financial-reports/forecast (revenue forecasting)
+GET/POST     /api/credit-sales (credit sales POS - deferred payments)
+POST         /api/credit-sales/:id/payment (record payment on credit sale)
+GET/POST     /api/credit-monitor/config (monitoring alert thresholds)
+POST         /api/credit-monitor/scan (scan all clients for score changes → alerts)
+GET          /api/credit-monitor/history/:clientId (score history timeline)
+POST         /api/credit-report/parse-xml (parse MISMO/TUNA XML credit reports)
+GET          /api/bureau/status-all (all 4 bureaus: EQ/EX/TU/Innovis)
 ```
 
 ## Environment Variables Required

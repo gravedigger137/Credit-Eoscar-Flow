@@ -39,6 +39,10 @@ import {
   getClientTrustAccount, getAllTrustAccounts, getLedgerEntries, getAccountSummary,
   reconcileTrustAccounts, getTrustBalance
 } from "./trust-accounting";
+import {
+  recordUsageEvent, getUsageSummary, getUsageReport,
+  getClientUsage, getRecentEvents, getPricing
+} from "./usage-metering";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
 
@@ -1044,6 +1048,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       const report = await parseCreditReportPDF(filePath!);
+      recordUsageEvent({ eventType: "report_parsed", metadata: { format: "pdf" }, quantity: 1 }).catch(() => {});
       res.json(report);
     } catch (e) { handleError(res, e); }
     finally { if (filePath && fs.existsSync(filePath)) try { fs.unlinkSync(filePath); } catch {} }
@@ -1054,6 +1059,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { text } = req.body;
       if (!text) return res.status(400).json({ message: "No text provided" });
       const report = parseCreditReportText(text);
+      recordUsageEvent({ eventType: "report_parsed", metadata: { format: "text" }, quantity: 1 }).catch(() => {});
       res.json(report);
     } catch (e) { handleError(res, e); }
   });
@@ -1071,10 +1077,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const client = await getBureauClient(bureau);
         if (!client) return res.status(400).json({ message: `${bureau} API not configured. Add credentials in Settings > Bureau APIs.` });
         const report = await client.pullReport({ firstName, lastName, ssn, dob, address, city, state, zip });
+        recordUsageEvent({ eventType: "bureau_pull", metadata: { bureau }, quantity: 1 }).catch(() => {});
         return res.json(report);
       }
 
       const reports = await pullAllBureauReports({ firstName, lastName, ssn, dob, address, city, state, zip });
+      recordUsageEvent({ eventType: "bureau_pull", metadata: { bureau: "all" }, quantity: 3 }).catch(() => {});
       res.json(reports);
     } catch (e) { handleError(res, e); }
   });
@@ -1315,6 +1323,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!xml) return res.status(400).json({ message: "XML content required" });
       const parsed = parseXMLCreditReport(xml);
       res.json(parsed);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── USAGE METERING ROUTES ───────────────────────────────────────────────
+
+  app.get("/api/usage/summary", async (req, res) => {
+    try {
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const summary = await getUsageSummary(startDate, endDate);
+      res.json(summary);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/usage/report", async (req, res) => {
+    try {
+      const period = (req.query.period as string) || "monthly";
+      const report = await getUsageReport(period as any);
+      res.json(report);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/usage/events", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const events = await getRecentEvents(limit);
+      res.json(events);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/usage/client/:clientId", async (req, res) => {
+    try {
+      const events = await getClientUsage(req.params.clientId);
+      res.json(events);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/usage/pricing", async (_req, res) => {
+    try {
+      res.json(getPricing());
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/usage/record", async (req, res) => {
+    try {
+      const { eventType, clientId, metadata, quantity } = req.body;
+      if (!eventType) return res.status(400).json({ message: "eventType required" });
+      const event = await recordUsageEvent({ eventType, clientId, metadata, quantity: quantity || 1 });
+      res.json(event);
     } catch (e) { handleError(res, e); }
   });
 

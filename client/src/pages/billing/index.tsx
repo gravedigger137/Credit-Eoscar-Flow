@@ -11,7 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
-import { CreditCard, Download, Plus, Filter, Search, TrendingUp, DollarSign, ArrowUpRight, CheckCircle2, AlertTriangle, Wallet, Save } from "lucide-react";
+import { CreditCard, Download, Plus, Filter, Search, TrendingUp, DollarSign, ArrowUpRight, CheckCircle2, AlertTriangle, Wallet, Save, Activity, BarChart3 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -26,8 +27,10 @@ export default function Billing() {
   const [form, setForm] = useState(emptyTxn);
   const [stripeMode, setStripeMode] = useState(true);
 
+  const [usagePeriod, setUsagePeriod] = useState("monthly");
   const { data: transactions = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/transactions"] });
   const { data: clients = [] } = useQuery<any[]>({ queryKey: ["/api/clients"] });
+  const { data: usageReport } = useQuery<any>({ queryKey: ["/api/usage/report", usagePeriod], queryFn: async () => { const r = await fetch(`/api/usage/report?period=${usagePeriod}`, { credentials: "include" }); return r.json(); } });
 
   const clientMap = Object.fromEntries(clients.map((c: any) => [c.id, `${c.firstName} ${c.lastName}`]));
 
@@ -153,9 +156,10 @@ export default function Billing() {
         </div>
 
         <Tabs defaultValue="transactions" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-            <TabsTrigger value="transactions">All Transactions</TabsTrigger>
-            <TabsTrigger value="stripe">Stripe Settings</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
+            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="usage" data-testid="tab-usage"><Activity className="w-3 h-3 mr-1" /> Usage</TabsTrigger>
+            <TabsTrigger value="stripe">Stripe</TabsTrigger>
             <TabsTrigger value="payouts">Payouts</TabsTrigger>
           </TabsList>
           
@@ -215,6 +219,68 @@ export default function Billing() {
             </Card>
           </TabsContent>
           
+          <TabsContent value="usage" className="mt-6">
+            <Card className="glass-panel">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div><CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5" /> Usage Metering</CardTitle><CardDescription>Track billable events across all services</CardDescription></div>
+                  <Select value={usagePeriod} onValueChange={setUsagePeriod}>
+                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Today</SelectItem>
+                      <SelectItem value="weekly">This Week</SelectItem>
+                      <SelectItem value="monthly">This Month</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {usageReport ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="bg-muted/50 rounded-lg p-4 text-center">
+                        <div className="text-sm text-muted-foreground">Total Events</div>
+                        <div className="text-2xl font-bold" data-testid="text-total-events">{usageReport.totalEvents}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded-lg p-4 text-center">
+                        <div className="text-sm text-muted-foreground">Estimated Cost</div>
+                        <div className="text-2xl font-bold text-primary">${(usageReport.estimatedCost / 100).toFixed(2)}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded-lg p-4 text-center">
+                        <div className="text-sm text-muted-foreground">Event Types</div>
+                        <div className="text-2xl font-bold">{usageReport.events.length}</div>
+                      </div>
+                    </div>
+                    {usageReport.breakdown.length > 0 ? (
+                      <Table>
+                        <TableHeader><TableRow>
+                          <TableHead>Event Type</TableHead>
+                          <TableHead>Count</TableHead>
+                          <TableHead>Unit Price</TableHead>
+                          <TableHead>Total</TableHead>
+                        </TableRow></TableHeader>
+                        <TableBody>
+                          {usageReport.breakdown.map((b: any) => (
+                            <TableRow key={b.eventType}>
+                              <TableCell className="font-medium">{b.eventType.replace(/_/g, " ")}</TableCell>
+                              <TableCell>{b.count}</TableCell>
+                              <TableCell>${(b.unitPrice / 100).toFixed(2)}</TableCell>
+                              <TableCell className="font-bold">${(b.total / 100).toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="py-8 text-center text-muted-foreground">No usage events recorded for this period</div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-muted-foreground">Loading usage data...</div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="stripe" className="mt-6">
             <Card className="glass-panel">
               <CardHeader>

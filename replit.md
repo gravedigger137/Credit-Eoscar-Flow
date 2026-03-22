@@ -74,6 +74,7 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `server/financial-reports.ts` — Sales reports, revenue forecasting, credit sales POS, credit factor snapshots (priyaranjan756/Creditshelf + francheska-guzman/credit-report patterns)
 - `client/src/pages/bureau/index.tsx` — Bureau & Score Simulator page (3 tabs: Report Parser, Score Simulator, Bureau APIs) — 4 bureaus: EQ/EX/TU + CBC/Innovis
 - `client/src/pages/analytics/index.tsx` — Financial Analytics page (4 tabs: Credit Predictor, Sales Reports, Revenue Forecast, Credit Sales POS)
+- `server/usage-metering.ts` — Usage-based event tracking and billing (openmeterio/openmeter patterns) — tracks bureau pulls, disputes, AI calls, etc.
 - `server/trust-accounting.ts` — Double-entry trust accounting ledger with reconciliation (moov-io/accounts + CGAccounting patterns)
 - `client/src/pages/trust-accounting/index.tsx` — Trust Accounting page (3 tabs: Accounts, Ledger, Reconcile)
 - `client/src/pages/` — All 19 pages
@@ -144,6 +145,12 @@ GET          /api/trust-accounts/:clientId/balance (trust balance)
 POST         /api/trust-accounts/:clientId/deposit (record trust deposit)
 POST         /api/trust-accounts/:clientId/withdraw (record trust withdrawal)
 GET/POST     /api/ledger (general ledger entries)
+GET          /api/usage/summary (usage event summary by type)
+GET          /api/usage/report?period=monthly (usage billing report with costs)
+GET          /api/usage/events (recent usage events)
+GET          /api/usage/client/:clientId (client usage history)
+GET          /api/usage/pricing (unit pricing table)
+POST         /api/usage/record (manually record usage event)
 POST         /api/calculator/loan (loan amortization + payment schedule)
 POST         /api/calculator/debt-payoff (avalanche/snowball debt payoff plan)
 POST         /api/calculator/repair-roi (credit repair investment ROI)

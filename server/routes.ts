@@ -20,7 +20,7 @@ import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2R
 import { parseCreditReportPDF, parseCreditReportText } from "./credit-report-parser";
 import { pullAllBureauReports, getBureauClient } from "./bureau-clients";
 import { simulateScoreChanges, generateRecommendations, type ScoreFactors, type SimulationAction } from "./score-simulator";
-import { analyzeCreditFactors, type CreditFactorInput } from "./credit-predictor";
+import { analyzeCreditFactors, predictDefault, type CreditFactorInput, type DefaultPredictionInput } from "./credit-predictor";
 import {
   getSalesReport, getClientFinancialSummary, getRevenueForecasting,
   createCreditSale, getCreditSales, recordCreditSalePayment,
@@ -30,6 +30,10 @@ import {
   detectScoreChanges, createAlertsAsNotifications, getClientScoreHistory,
   getMonitoringConfig, setMonitoringConfig, parseXMLCreditReport
 } from "./credit-monitor";
+import {
+  calculateLoanPayment, calculateDebtPayoff, calculateCreditRepairROI,
+  calculateCompoundInterest, calculateDebtToIncomeRatio
+} from "./financial-calculator";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
 
@@ -1162,6 +1166,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
+  app.post("/api/credit-predictor/default-risk", async (req, res) => {
+    try {
+      const input = req.body as DefaultPredictionInput;
+      if (!input || input.creditLimit === undefined || input.balance === undefined) return res.status(400).json({ message: "creditLimit and balance are required" });
+      if (!Array.isArray(input.paymentHistory)) input.paymentHistory = [];
+      if (!Array.isArray(input.billAmounts)) input.billAmounts = [];
+      if (!Array.isArray(input.payAmounts)) input.payAmounts = [];
+      const prediction = predictDefault(input);
+      res.json(prediction);
+    } catch (e) { handleError(res, e); }
+  });
+
   app.post("/api/credit-predictor/analyze-client/:id", async (req, res) => {
     try {
       const clientId = req.params.id;
@@ -1294,6 +1310,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!xml) return res.status(400).json({ message: "XML content required" });
       const parsed = parseXMLCreditReport(xml);
       res.json(parsed);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── FINANCIAL CALCULATOR ROUTES ──────────────────────────────────────────
+
+  app.post("/api/calculator/loan", async (req, res) => {
+    try {
+      const { principal, annualRate, termMonths } = req.body;
+      if (!principal || annualRate === undefined || !termMonths) return res.status(400).json({ message: "principal, annualRate, termMonths required" });
+      res.json(calculateLoanPayment(principal, annualRate, termMonths));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/calculator/debt-payoff", async (req, res) => {
+    try {
+      const { debts, extraPayment, method } = req.body;
+      if (!debts || !Array.isArray(debts)) return res.status(400).json({ message: "debts array required (name, balance, rate, minPayment)" });
+      res.json(calculateDebtPayoff(debts, extraPayment || 0, method || "avalanche"));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/calculator/repair-roi", async (req, res) => {
+    try {
+      const { currentScore, projectedScore, totalDebt, repairCost, loanTermMonths } = req.body;
+      if (!currentScore || !projectedScore || !totalDebt) return res.status(400).json({ message: "currentScore, projectedScore, totalDebt required" });
+      res.json(calculateCreditRepairROI(currentScore, projectedScore, totalDebt, repairCost || 0, loanTermMonths || 360));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/calculator/compound-interest", async (req, res) => {
+    try {
+      const { principal, annualRate, years, compoundingPerYear, periodicContribution } = req.body;
+      if (principal === undefined || annualRate === undefined || !years) return res.status(400).json({ message: "principal, annualRate, years required" });
+      res.json(calculateCompoundInterest(principal, annualRate, years, compoundingPerYear || 12, periodicContribution || 0));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/calculator/dti", async (req, res) => {
+    try {
+      const { monthlyDebtPayments, monthlyGrossIncome } = req.body;
+      if (monthlyDebtPayments === undefined || !monthlyGrossIncome) return res.status(400).json({ message: "monthlyDebtPayments, monthlyGrossIncome required" });
+      res.json(calculateDebtToIncomeRatio(monthlyDebtPayments, monthlyGrossIncome));
     } catch (e) { handleError(res, e); }
   });
 

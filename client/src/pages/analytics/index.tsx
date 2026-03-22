@@ -19,7 +19,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const defaultInput = {
+const predictorDefaults = {
   creditCardUtilization: 45,
   onTimePayments: 42,
   totalPayments: 48,
@@ -53,11 +53,19 @@ function GradeCircle({ grade, size = "md" }: { grade: string; size?: "sm" | "md"
 export default function Analytics() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [predictorInput, setPredictorInput] = useState(defaultInput);
+  const [predictorInput, setPredictorInput] = useState(predictorDefaults);
   const [analysis, setAnalysis] = useState<any>(null);
   const [salesPeriod, setSalesPeriod] = useState("monthly");
   const [creditSaleOpen, setCreditSaleOpen] = useState(false);
   const [saleForm, setSaleForm] = useState({ clientId: "", description: "", amount: "", creditTerms: "", dueDate: "", notes: "" });
+  const [defaultInput, setDefaultInput] = useState({ creditLimit: 15000, balance: 8000, paymentHistory: [0, 0, -1, 0, 0, -2], billAmounts: [1200, 1400, 1100, 1500, 1300, 1600], payAmounts: [1200, 1400, 800, 1500, 1300, 1000] });
+  const [defaultResult, setDefaultResult] = useState<any>(null);
+
+  const defaultMutation = useMutation({
+    mutationFn: async () => { const r = await apiRequest("POST", "/api/credit-predictor/default-risk", defaultInput); return r.json(); },
+    onSuccess: (data) => { setDefaultResult(data); toast({ title: "Default Analysis Complete", description: `Risk: ${data.riskSegment} (${data.defaultProbability}% default probability)` }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const { data: salesReport } = useQuery<any>({ queryKey: ["/api/financial-reports/sales", salesPeriod], queryFn: async () => { const r = await fetch(`/api/financial-reports/sales?period=${salesPeriod}`, { credentials: "include" }); return r.json(); } });
   const { data: forecast } = useQuery<any>({ queryKey: ["/api/financial-reports/forecast"] });
@@ -84,8 +92,9 @@ export default function Analytics() {
   return (
     <Shell title="Financial Analytics" subtitle="Credit predictor, sales reports, revenue forecasting, and credit sales">
       <Tabs defaultValue="predictor" className="space-y-6">
-        <TabsList className="grid grid-cols-4 w-full max-w-2xl">
+        <TabsList className="grid grid-cols-5 w-full max-w-3xl">
           <TabsTrigger value="predictor" data-testid="tab-predictor"><Brain className="w-4 h-4 mr-1" /> Predictor</TabsTrigger>
+          <TabsTrigger value="default-risk" data-testid="tab-default-risk"><AlertTriangle className="w-4 h-4 mr-1" /> Default Risk</TabsTrigger>
           <TabsTrigger value="sales" data-testid="tab-sales"><BarChart3 className="w-4 h-4 mr-1" /> Sales</TabsTrigger>
           <TabsTrigger value="forecast" data-testid="tab-forecast"><TrendingUp className="w-4 h-4 mr-1" /> Forecast</TabsTrigger>
           <TabsTrigger value="credit-sales" data-testid="tab-credit-sales"><Receipt className="w-4 h-4 mr-1" /> Credit Sales</TabsTrigger>
@@ -221,6 +230,111 @@ export default function Analytics() {
                   <p className="text-sm">Enter credit factors to predict score, approval odds, and get recommendations — no credit pull needed</p>
                 </div>
               </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ─── DEFAULT RISK TAB ────────────────────────────────────────────── */}
+        <TabsContent value="default-risk" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> Default Risk Input</CardTitle>
+                <CardDescription>Analyze client payment behavior to predict default probability</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-xs">Credit Limit ($)</Label><Input type="number" value={defaultInput.creditLimit} onChange={e => setDefaultInput(p => ({ ...p, creditLimit: parseInt(e.target.value) || 0 }))} data-testid="input-def-limit" /></div>
+                  <div><Label className="text-xs">Current Balance ($)</Label><Input type="number" value={defaultInput.balance} onChange={e => setDefaultInput(p => ({ ...p, balance: parseInt(e.target.value) || 0 }))} data-testid="input-def-balance" /></div>
+                </div>
+                <div>
+                  <Label className="text-xs">Payment History (comma-sep: 0=on-time, -1=late, -2=missed)</Label>
+                  <Input value={defaultInput.paymentHistory.join(",")} onChange={e => setDefaultInput(p => ({ ...p, paymentHistory: e.target.value.split(",").map(Number).filter(n => !isNaN(n)) }))} data-testid="input-def-history" />
+                </div>
+                <div>
+                  <Label className="text-xs">Monthly Bill Amounts (comma-sep)</Label>
+                  <Input value={defaultInput.billAmounts.join(",")} onChange={e => setDefaultInput(p => ({ ...p, billAmounts: e.target.value.split(",").map(Number).filter(n => !isNaN(n)) }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Monthly Payment Amounts (comma-sep)</Label>
+                  <Input value={defaultInput.payAmounts.join(",")} onChange={e => setDefaultInput(p => ({ ...p, payAmounts: e.target.value.split(",").map(Number).filter(n => !isNaN(n)) }))} />
+                </div>
+                <Button onClick={() => defaultMutation.mutate()} disabled={defaultMutation.isPending} className="w-full" data-testid="btn-default-analyze">
+                  {defaultMutation.isPending ? "Analyzing..." : "Predict Default Risk"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {defaultResult && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5" /> Risk Assessment
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="text-center space-y-2">
+                      <div className={`text-5xl font-bold ${
+                        defaultResult.riskSegment === "low" ? "text-green-500" :
+                        defaultResult.riskSegment === "medium" ? "text-yellow-500" :
+                        defaultResult.riskSegment === "high" ? "text-orange-500" : "text-red-500"
+                      }`} data-testid="text-default-probability">
+                        {defaultResult.defaultProbability}%
+                      </div>
+                      <div className="text-sm text-muted-foreground">Default Probability</div>
+                      <Badge variant={
+                        defaultResult.riskSegment === "low" ? "default" :
+                        defaultResult.riskSegment === "medium" ? "secondary" :
+                        defaultResult.riskSegment === "high" ? "outline" : "destructive"
+                      } className="text-sm" data-testid="badge-risk-segment">
+                        {defaultResult.riskSegment.toUpperCase()} RISK
+                      </Badge>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm"><span>Risk Score</span><span className="font-medium">{defaultResult.riskScore} / 1000</span></div>
+                      <Progress value={defaultResult.riskScore / 10} className="h-2" />
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      {defaultResult.monthlyTrend === "improving" ? <TrendingUp className="w-4 h-4 text-green-500" /> :
+                       defaultResult.monthlyTrend === "declining" ? <TrendingDown className="w-4 h-4 text-red-500" /> :
+                       <Minus className="w-4 h-4 text-yellow-500" />}
+                      <span>Spending trend: <strong>{defaultResult.monthlyTrend}</strong></span>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-3 text-sm" data-testid="text-segment-desc">
+                      {defaultResult.segmentDescription}
+                    </div>
+                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm" data-testid="text-recommendation">
+                      <div className="font-medium text-blue-500 mb-1">Recommendation</div>
+                      {defaultResult.recommendation}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Activity className="w-5 h-5" /> Risk Factors</CardTitle>
+                    <CardDescription>Weighted factor analysis driving default prediction</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {defaultResult.factors.map((f: any, i: number) => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">{f.name}</span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={f.impact === "positive" ? "default" : f.impact === "neutral" ? "secondary" : "destructive"} className="text-xs">
+                              {f.impact}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">{f.weight}%</span>
+                          </div>
+                        </div>
+                        <Progress value={f.impact === "positive" ? 85 : f.impact === "neutral" ? 50 : 20} className="h-1.5" />
+                        <p className="text-xs text-muted-foreground">{f.detail}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </>
             )}
           </div>
         </TabsContent>

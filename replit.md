@@ -67,11 +67,14 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `server/credit-report-parser.ts` — PDF credit report parser (pdf-parse) — auto-extracts accounts, scores, negative items from EQ/EX/TU reports
 - `server/bureau-clients.ts` — Bureau API clients: EquifaxClient (@flexbase/equifax-node-client), ExperianClient (experian-node), TransUnionClient (TUNA XML)
 - `server/score-simulator.ts` — FICO score impact simulator — estimates score changes from repair actions (remove collection, pay down, add AU, etc.)
-- `server/credit-predictor.ts` — 6-factor FICO credit score predictor with approval odds (rishabhpahuja/Credit-Score- model)
+- `server/credit-predictor.ts` — 6-factor FICO credit score predictor with approval odds + default risk prediction (payment behavior, bill-to-pay ratio, spending trend, overleverage)
+- `server/credit-monitor.ts` — Automated credit monitoring with score change detection, XML report parsing, alert deduplication
+- `server/financial-calculator.ts` — Fintech calculator engine: loan amortization, debt payoff (avalanche/snowball), credit repair ROI, compound interest, DTI analysis
+- `client/src/pages/calculators/index.tsx` — Financial Calculators page (4 tabs: Loan, Debt Payoff, Repair ROI, DTI)
 - `server/financial-reports.ts` — Sales reports, revenue forecasting, credit sales POS, credit factor snapshots (priyaranjan756/Creditshelf + francheska-guzman/credit-report patterns)
 - `client/src/pages/bureau/index.tsx` — Bureau & Score Simulator page (3 tabs: Report Parser, Score Simulator, Bureau APIs) — 4 bureaus: EQ/EX/TU + CBC/Innovis
 - `client/src/pages/analytics/index.tsx` — Financial Analytics page (4 tabs: Credit Predictor, Sales Reports, Revenue Forecast, Credit Sales POS)
-- `client/src/pages/` — All 17 pages
+- `client/src/pages/` — All 18 pages
 
 ## API Routes
 
@@ -130,6 +133,12 @@ GET/POST     /api/credit-monitor/config (monitoring alert thresholds)
 POST         /api/credit-monitor/scan (scan all clients for score changes → alerts)
 GET          /api/credit-monitor/history/:clientId (score history timeline)
 POST         /api/credit-report/parse-xml (parse MISMO/TUNA XML credit reports)
+POST         /api/credit-predictor/default-risk (default probability prediction)
+POST         /api/calculator/loan (loan amortization + payment schedule)
+POST         /api/calculator/debt-payoff (avalanche/snowball debt payoff plan)
+POST         /api/calculator/repair-roi (credit repair investment ROI)
+POST         /api/calculator/compound-interest (compound interest projections)
+POST         /api/calculator/dti (debt-to-income ratio analysis)
 GET          /api/bureau/status-all (all 4 bureaus: EQ/EX/TU/Innovis)
 ```
 

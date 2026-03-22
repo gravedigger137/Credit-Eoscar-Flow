@@ -58,6 +58,141 @@ function gradeFromPercent(pct: number): "A" | "B" | "C" | "D" | "F" {
   return "F";
 }
 
+export interface DefaultPredictionInput {
+  creditLimit: number;
+  balance: number;
+  paymentHistory: number[];
+  billAmounts: number[];
+  payAmounts: number[];
+  age?: number;
+  educationLevel?: number;
+  maritalStatus?: number;
+}
+
+export interface DefaultPrediction {
+  defaultProbability: number;
+  riskSegment: "low" | "medium" | "high" | "critical";
+  riskScore: number;
+  factors: { name: string; value: number; impact: "positive" | "neutral" | "negative"; weight: number; detail: string }[];
+  recommendation: string;
+  segmentDescription: string;
+  monthlyTrend: "improving" | "stable" | "declining";
+}
+
+export function predictDefault(input: DefaultPredictionInput): DefaultPrediction {
+  const factors: DefaultPrediction["factors"] = [];
+
+  const utilization = input.creditLimit > 0 ? input.balance / input.creditLimit : 1;
+  const utilRisk = utilization > 0.9 ? 0.85 : utilization > 0.7 ? 0.6 : utilization > 0.5 ? 0.4 : utilization > 0.3 ? 0.2 : 0.05;
+  factors.push({
+    name: "Credit Utilization Ratio",
+    value: Math.round(utilization * 100),
+    impact: utilRisk > 0.5 ? "negative" : utilRisk > 0.25 ? "neutral" : "positive",
+    weight: 25,
+    detail: `${Math.round(utilization * 100)}% of limit used ($${input.balance.toLocaleString()} / $${input.creditLimit.toLocaleString()})`,
+  });
+
+  const payHistory = input.paymentHistory || [];
+  const latePayments = payHistory.filter(p => p < 0 || p > 1).length;
+  const missedPayments = payHistory.filter(p => p <= -2).length;
+  const payHistoryRisk = missedPayments >= 3 ? 0.9 : missedPayments >= 1 ? 0.65 : latePayments >= 3 ? 0.5 : latePayments >= 1 ? 0.3 : 0.05;
+  factors.push({
+    name: "Payment Behavior",
+    value: latePayments,
+    impact: payHistoryRisk > 0.5 ? "negative" : payHistoryRisk > 0.25 ? "neutral" : "positive",
+    weight: 30,
+    detail: `${missedPayments} missed, ${latePayments} late out of ${payHistory.length} months tracked`,
+  });
+
+  const bills = input.billAmounts || [];
+  const pays = input.payAmounts || [];
+  let payRatio = 1;
+  if (bills.length > 0) {
+    const totalBilled = bills.reduce((s, b) => s + Math.abs(b), 0);
+    const totalPaid = pays.reduce((s, p) => s + p, 0);
+    payRatio = totalBilled > 0 ? totalPaid / totalBilled : 1;
+  }
+  const payRatioRisk = payRatio < 0.3 ? 0.85 : payRatio < 0.5 ? 0.6 : payRatio < 0.8 ? 0.35 : payRatio < 1.0 ? 0.15 : 0.05;
+  factors.push({
+    name: "Bill-to-Payment Ratio",
+    value: Math.round(payRatio * 100),
+    impact: payRatioRisk > 0.5 ? "negative" : payRatioRisk > 0.25 ? "neutral" : "positive",
+    weight: 20,
+    detail: `Client pays ${Math.round(payRatio * 100)}% of billed amounts on average`,
+  });
+
+  let trendRisk = 0.3;
+  let monthlyTrend: DefaultPrediction["monthlyTrend"] = "stable";
+  if (bills.length >= 3) {
+    const recentBills = bills.slice(-3);
+    const olderBills = bills.slice(0, -3);
+    const recentAvg = recentBills.reduce((s, b) => s + b, 0) / recentBills.length;
+    const olderAvg = olderBills.length > 0 ? olderBills.reduce((s, b) => s + b, 0) / olderBills.length : recentAvg;
+    if (recentAvg > olderAvg * 1.3) { trendRisk = 0.7; monthlyTrend = "declining"; }
+    else if (recentAvg < olderAvg * 0.8) { trendRisk = 0.1; monthlyTrend = "improving"; }
+  }
+  factors.push({
+    name: "Spending Trend",
+    value: Math.round(trendRisk * 100),
+    impact: trendRisk > 0.5 ? "negative" : trendRisk > 0.25 ? "neutral" : "positive",
+    weight: 15,
+    detail: `Spending is ${monthlyTrend} over the last ${bills.length} months`,
+  });
+
+  const balanceToLimit = input.creditLimit > 0 ? input.balance / input.creditLimit : 1;
+  const maxBill = bills.length > 0 ? Math.max(...bills) : 0;
+  const maxToLimit = input.creditLimit > 0 ? maxBill / input.creditLimit : 0;
+  const overleverageRisk = (balanceToLimit > 0.8 && maxToLimit > 0.5) ? 0.75 : balanceToLimit > 0.6 ? 0.4 : 0.1;
+  factors.push({
+    name: "Overleverage Risk",
+    value: Math.round(balanceToLimit * 100),
+    impact: overleverageRisk > 0.5 ? "negative" : overleverageRisk > 0.25 ? "neutral" : "positive",
+    weight: 10,
+    detail: `Balance at ${Math.round(balanceToLimit * 100)}% of limit; peak bill was ${Math.round(maxToLimit * 100)}% of limit`,
+  });
+
+  const totalWeight = factors.reduce((s, f) => s + f.weight, 0);
+  const weightedRisk = factors.reduce((s, f) => {
+    const riskVal = f.name === "Credit Utilization Ratio" ? utilRisk :
+                    f.name === "Payment Behavior" ? payHistoryRisk :
+                    f.name === "Bill-to-Payment Ratio" ? payRatioRisk :
+                    f.name === "Spending Trend" ? trendRisk : overleverageRisk;
+    return s + (riskVal * f.weight / totalWeight);
+  }, 0);
+
+  const defaultProbability = Math.round(clamp(weightedRisk * 100, 1, 99));
+  const riskScore = Math.round(clamp((1 - weightedRisk) * 1000, 0, 1000));
+
+  const riskSegment: DefaultPrediction["riskSegment"] =
+    defaultProbability >= 70 ? "critical" :
+    defaultProbability >= 45 ? "high" :
+    defaultProbability >= 20 ? "medium" : "low";
+
+  const segmentDescriptions = {
+    low: "Client shows strong payment discipline and healthy credit usage. Low default risk — suitable for credit limit increases or premium products.",
+    medium: "Some risk indicators present. Monitor payment patterns and utilization. Consider proactive outreach to prevent deterioration.",
+    high: "Multiple risk factors detected. High probability of missed payments. Recommend immediate intervention — payment plan, reduced limits, or credit counseling referral.",
+    critical: "Severe default risk. Client shows pattern of missed payments, high utilization, and declining payment ratios. Escalate for collections strategy or hardship program.",
+  };
+
+  const recommendations = {
+    low: "Maintain current credit terms. Client qualifies for loyalty offers and credit line increases.",
+    medium: "Set up payment reminders. Consider balance transfer offers to reduce utilization. Schedule 30-day review.",
+    high: "Initiate proactive contact. Offer structured payment plan. Freeze credit line increases. Review every 2 weeks.",
+    critical: "Immediate intervention required. Enroll in hardship program or negotiate settlement. Consider reporting to collections if no response within 15 days.",
+  };
+
+  return {
+    defaultProbability,
+    riskSegment,
+    riskScore,
+    factors,
+    recommendation: recommendations[riskSegment],
+    segmentDescription: segmentDescriptions[riskSegment],
+    monthlyTrend,
+  };
+}
+
 export function analyzeCreditFactors(input: CreditFactorInput): CreditFactorAnalysis {
   const factors: CreditFactorAnalysis["factors"] = [];
 

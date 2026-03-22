@@ -1,0 +1,133 @@
+
+finos/OpenMAMA
+OpenMAMA is an open source project that provides a high performance middleware agnostic messaging API that interfaces with a variety of p…
+middleware
+fintech
+gplv2
+openmama
+linux-foundation
+C++
+·
+171
+·
+Updated 16 days ago
+
+AlekseyKorshuk/yoomoney-api
+Python client for the YooMoney (ex-Yandex.Money) API — sync & async, Pydantic models, type-safe
+python
+async
+api-client
+payments
+fintech
+Python
+·
+303
+·
+Updated on Feb 13
+
+bennycode/coinbase-pro-node
+Public archive
+Coinbase API written in TypeScript and covered by tests.
+api
+typescript
+bitcoin
+trading
+coinbase
+TypeScript
+·
+252
+·
+Updated on Mar 31, 2025
+
+bennycode/ig-trading-api
+IG Trading API for Node.js, written in TypeScript.
+finance
+trading-api
+fintech
+derivatives
+cfd
+TypeScript
+·
+48
+·
+Updated on Aug 31, 2024
+
+IBM/real-time-payments
+Public archive
+Code for a Developer Journey that uses the Financial APIs on Bluemix. This application uses this service to send and request payments.
+fintech
+payment-service
+ibmcode
+ibmcloud
+call-for-code
+JavaScript
+·
+38
+·
+Updated on May 1, 2019
+
+sagnikghoshcr7/AI-Enabled-B2B-FINTECH-Management
+AI-Enabled FinTech B2B Invoice Management Application
+react
+javascript
+mysql
+python
+java
+Jupyter Notebook
+·
+17
+·
+Updated on Dec 11, 2022
+
+fintechee/Fintech-NonMql
+Expert Advisors, Browser-based EA, Free Crypto / Forex Historical DATA API plugins, EA Codes Generator, Market Maker Bot, Crypto Options …
+vue
+ace
+fintech
+algotrading
+ea
+Vue
+·
+6
+·
+Updated on Mar 3, 2023
+
+moov-io/accounts
+Public archive
+accounts - General Ledger and financial account service with an HTTP API
+ledger
+fintech
+banking
+hacktoberfest
+deposit
+Go
+·
+56
+·
+Updated on Oct 27, 2020
+
+openmeterio/openmeter
+Metering and Billing for AI, API and DevOps. Collect and aggregate millions of usage events in real-time and enable usage-based billing.
+golang
+kafka
+analytics
+stripe
+clickhouse
+Go
+·
+1.9k
+·
+Updated 1 hour ago
+
+alpacahq/example-scalping
+A working example algorithm for scalping strategy trading multiple stocks concurrently using python asyncio
+api
+async
+trading-bot
+python3
+fintech
+Python
+·
+815
+·
+Updated on Oct 1, 2023

@@ -3,7 +3,7 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import {
   users, clients, disputes, creditReports, tradelines,
   creditLines, transactions, notifications, apiConfigs,
-  cardholderPartners, metro2Submissions,
+  cardholderPartners, metro2Submissions, clientDocuments,
   type User, type InsertUser,
   type Client, type InsertClient,
   type Dispute, type InsertDispute,
@@ -14,6 +14,7 @@ import {
   type Notification, type InsertNotification,
   type CardholderPartner, type InsertCardholderPartner,
   type Metro2Submission, type InsertMetro2Submission,
+  type ClientDocument, type InsertClientDocument,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -83,6 +84,12 @@ export interface IStorage {
   getMetro2SubmissionsByClient(clientId: string): Promise<Metro2Submission[]>;
   createMetro2Submission(s: InsertMetro2Submission): Promise<Metro2Submission>;
   updateMetro2Submission(id: string, data: Partial<InsertMetro2Submission>): Promise<Metro2Submission>;
+
+  // Client Documents
+  getDocumentsByClient(clientId: string): Promise<ClientDocument[]>;
+  getDocument(id: string): Promise<ClientDocument | undefined>;
+  createDocument(doc: InsertClientDocument): Promise<ClientDocument>;
+  deleteDocument(id: string): Promise<void>;
 
   // API Config
   getApiConfig(key: string): Promise<string | undefined>;
@@ -285,6 +292,22 @@ export class DatabaseStorage implements IStorage {
   }
   async setApiConfig(key: string, value: string) {
     await db.insert(apiConfigs).values({ key, value }).onConflictDoUpdate({ target: apiConfigs.key, set: { value, updatedAt: new Date() } });
+  }
+
+  // Client Documents
+  async getDocumentsByClient(clientId: string) {
+    return db.select().from(clientDocuments).where(eq(clientDocuments.clientId, clientId)).orderBy(desc(clientDocuments.uploadedAt));
+  }
+  async getDocument(id: string) {
+    const [d] = await db.select().from(clientDocuments).where(eq(clientDocuments.id, id));
+    return d;
+  }
+  async createDocument(doc: InsertClientDocument) {
+    const [d] = await db.insert(clientDocuments).values(doc).returning();
+    return d;
+  }
+  async deleteDocument(id: string) {
+    await db.delete(clientDocuments).where(eq(clientDocuments.id, id));
   }
 
   // Dashboard stats

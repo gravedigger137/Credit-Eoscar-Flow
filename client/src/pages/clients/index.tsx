@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
-import { Search, Plus, Mail, Phone, AlertTriangle, UserCheck, FileText, ShieldAlert, ClipboardList, Eye, Pencil } from "lucide-react";
+import { Search, Plus, Mail, Phone, AlertTriangle, UserCheck, FileText, ShieldAlert, ClipboardList, Eye, Pencil, Upload, Download, Trash2, File } from "lucide-react";
+import { useRef } from "react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -41,6 +42,11 @@ export default function Clients() {
   const [viewOpen, setViewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadClient, setUploadClient] = useState<any>(null);
+  const [uploadCategory, setUploadCategory] = useState("credit_report");
+  const [uploadNotes, setUploadNotes] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: clients = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/clients"] });
   const { data: reports = [] } = useQuery<any[]>({ queryKey: ["/api/reports"] });
@@ -75,6 +81,42 @@ export default function Clients() {
       toast({ title: "Client updated!" });
     },
     onError: () => toast({ title: "Error updating client", variant: "destructive" }),
+  });
+
+  const docsQuery = useQuery<any[]>({
+    queryKey: ["/api/clients", uploadClient?.id || viewClient?.id, "documents"],
+    queryFn: async () => {
+      const cid = uploadClient?.id || viewClient?.id;
+      if (!cid) return [];
+      const r = await fetch(`/api/clients/${cid}/documents`, { credentials: "include" });
+      return r.json();
+    },
+    enabled: !!(uploadClient?.id || viewClient?.id),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async ({ clientId, file, category, notes }: { clientId: string; file: File; category: string; notes: string }) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("category", category);
+      fd.append("notes", notes);
+      const r = await fetch(`/api/clients/${clientId}/documents`, { method: "POST", body: fd, credentials: "include" });
+      if (!r.ok) throw new Error("Upload failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      docsQuery.refetch();
+      qc.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({ title: "Document uploaded!" });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setUploadNotes("");
+    },
+    onError: () => toast({ title: "Upload failed", variant: "destructive" }),
+  });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: async (id: string) => { const r = await apiRequest("DELETE", `/api/documents/${id}`); return r; },
+    onSuccess: () => { docsQuery.refetch(); toast({ title: "Document deleted" }); },
   });
 
   const pullMutation = useMutation({
@@ -360,6 +402,15 @@ export default function Clients() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              onClick={() => { setUploadClient(client); setUploadOpen(true); }}
+                              data-testid={`button-upload-doc-${client.id}`}
+                              title="Upload Documents"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => handleEditClient(client)}
                               data-testid={`button-edit-client-${client.id}`}
                             >
@@ -609,6 +660,91 @@ export default function Clients() {
             >
               {editMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={uploadOpen} onOpenChange={(o) => { setUploadOpen(o); if (!o) { setUploadClient(null); setUploadNotes(""); setUploadCategory("credit_report"); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Documents — {uploadClient?.firstName} {uploadClient?.lastName}</DialogTitle>
+            <DialogDescription>Upload credit reports, ID documents, letters, or other files (max 20 MB each).</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select value={uploadCategory} onValueChange={setUploadCategory}>
+                  <SelectTrigger data-testid="select-upload-category"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="credit_report">Credit Report</SelectItem>
+                    <SelectItem value="id_document">ID Document</SelectItem>
+                    <SelectItem value="proof_of_address">Proof of Address</SelectItem>
+                    <SelectItem value="dispute_letter">Dispute Letter</SelectItem>
+                    <SelectItem value="bureau_response">Bureau Response</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes (optional)</Label>
+                <Input value={uploadNotes} onChange={e => setUploadNotes(e.target.value)} placeholder="e.g. Equifax report March 2026" data-testid="input-upload-notes" />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.txt"
+                className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                data-testid="input-upload-file"
+              />
+              <Button
+                onClick={() => {
+                  const file = fileInputRef.current?.files?.[0];
+                  if (!file || !uploadClient) return;
+                  uploadMutation.mutate({ clientId: uploadClient.id, file, category: uploadCategory, notes: uploadNotes });
+                }}
+                disabled={uploadMutation.isPending}
+                data-testid="button-upload-submit"
+              >
+                {uploadMutation.isPending ? "Uploading..." : <><Upload className="w-4 h-4 mr-2" /> Upload</>}
+              </Button>
+            </div>
+            <div className="border-t pt-4">
+              <p className="text-sm font-medium mb-3">Uploaded Documents</p>
+              {(docsQuery.data?.length ?? 0) === 0 ? (
+                <p className="text-sm text-muted-foreground">No documents yet.</p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {docsQuery.data?.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 text-sm" data-testid={`doc-row-${doc.id}`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <File className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{doc.originalName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {doc.category.replace(/_/g, " ")} · {(doc.fileSize / 1024).toFixed(0)} KB · {new Date(doc.uploadedAt).toLocaleDateString()}
+                          </p>
+                          {doc.notes && <p className="text-xs text-muted-foreground italic">{doc.notes}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button variant="ghost" size="sm" asChild data-testid={`button-download-${doc.id}`}>
+                          <a href={`/api/documents/${doc.id}/download`} download><Download className="w-3.5 h-3.5" /></a>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteDocMutation.mutate(doc.id)} data-testid={`button-delete-doc-${doc.id}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUploadOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

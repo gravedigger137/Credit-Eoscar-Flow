@@ -1,6 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
 import {
   insertClientSchema, insertDisputeSchema, insertCreditReportSchema,
@@ -11,6 +14,26 @@ import { buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES } from "./metro2";
 import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record } from "./ai";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, unique + path.extname(file.originalname));
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".doc", ".docx", ".txt"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error("File type not allowed. Accepted: PDF, images, Word docs, text files."));
+  },
+});
 
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -841,6 +864,74 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ result });
     } catch (e) { handleError(res, e); }
   });
+
+  // ─── CLIENT DOCUMENT UPLOAD ─────────────────────────────────────────────
+  app.get("/api/clients/:clientId/documents", async (req, res) => {
+    try {
+      const docs = await storage.getDocumentsByClient(req.params.clientId);
+      res.json(docs);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/clients/:clientId/documents", upload.single("file"), async (req, res) => {
+    const file = req.file;
+    try {
+      if (!file) return res.status(400).json({ message: "No file uploaded" });
+      const client = await storage.getClient(req.params.clientId);
+      if (!client) {
+        fs.unlinkSync(file.path);
+        return res.status(404).json({ message: "Client not found" });
+      }
+      const validCategories = ["credit_report", "id_document", "proof_of_address", "dispute_letter", "bureau_response", "other"];
+      const category = validCategories.includes(req.body.category) ? req.body.category : "credit_report";
+      const notes = typeof req.body.notes === "string" ? req.body.notes.slice(0, 500) : null;
+      const doc = await storage.createDocument({
+        clientId: req.params.clientId,
+        fileName: file.filename,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        category,
+        notes,
+      });
+      try {
+        await storage.createNotification({
+          type: "client",
+          title: "Document Uploaded",
+          message: `${file.originalname} uploaded for ${client.firstName} ${client.lastName}`,
+          read: false,
+        });
+      } catch (_) {}
+      res.json(doc);
+    } catch (e) {
+      if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      handleError(res, e);
+    }
+  });
+
+  app.get("/api/documents/:id/download", async (req, res) => {
+    try {
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      const filePath = path.join(uploadsDir, doc.fileName);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found on disk" });
+      res.setHeader("Content-Disposition", `attachment; filename="${doc.originalName}"`);
+      res.setHeader("Content-Type", doc.mimeType);
+      fs.createReadStream(filePath).pipe(res);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/documents/:id", async (req, res) => {
+    try {
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      const filePath = path.join(uploadsDir, doc.fileName);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      await storage.deleteDocument(req.params.id);
+      res.json({ success: true });
+    } catch (e) { handleError(res, e); }
+  });
+
 
   return httpServer;
 }

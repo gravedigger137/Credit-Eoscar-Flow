@@ -29,7 +29,7 @@ A professional credit repair business management platform for credit repair agen
 ## Features
 
 - **Dashboard** — Live stats (active clients, disputes, tradelines, revenue)
-- **Clients** — Full client management with add/edit/delete, credit score tracking, PII (SSN, DOB, ID verification)
+- **Clients** — Full client management with add/edit/delete, credit score tracking, PII (SSN, DOB, ID verification), document uploads (PDF/image/Word)
 - **Disputes (e-OSCAR)** — Create and track credit bureau disputes with status, method tracking (mail/e-OSCAR), tracking numbers
 - **Credit Reports** — Import and analyze 3-bureau credit report pulls
 - **Tradelines** — Manage authorized user tradeline placements and orders
@@ -45,7 +45,7 @@ A professional credit repair business management platform for credit repair agen
 
 ## Database Schema (shared/schema.ts)
 
-Tables: `users`, `clients`, `disputes`, `credit_reports`, `tradelines`, `credit_lines`, `transactions`, `notifications`, `cardholder_partners`, `metro2_submissions`, `api_configs`
+Tables: `users`, `clients`, `disputes`, `credit_reports`, `tradelines`, `credit_lines`, `transactions`, `notifications`, `cardholder_partners`, `metro2_submissions`, `client_documents`, `api_configs`
 
 Key client fields: firstName, middleName, lastName, suffix, email, phone, ssn, dob, address, city, state, zip, previousAddress, idType, idNumber
 

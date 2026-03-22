@@ -236,6 +236,23 @@ export const insertMetro2SubmissionSchema = createInsertSchema(metro2Submissions
 export type InsertMetro2Submission = z.infer<typeof insertMetro2SubmissionSchema>;
 export type Metro2Submission = typeof metro2Submissions.$inferSelect;
 
+// ─── CLIENT DOCUMENTS ────────────────────────────────────────────────────
+export const clientDocuments = pgTable("client_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  originalName: text("original_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  fileSize: integer("file_size").notNull(),
+  category: text("category").notNull().default("credit_report"),
+  notes: text("notes"),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+export const insertClientDocumentSchema = createInsertSchema(clientDocuments).omit({ id: true, uploadedAt: true });
+export type InsertClientDocument = z.infer<typeof insertClientDocumentSchema>;
+export type ClientDocument = typeof clientDocuments.$inferSelect;
+
 // ─── API CONFIGS ──────────────────────────────────────────────────────────
 export const apiConfigs = pgTable("api_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

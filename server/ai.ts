@@ -1,6 +1,14 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const apiKey = process.env.OPENAI_API_KEY;
+if (apiKey) {
+  const prefix = apiKey.substring(0, 7);
+  const suffix = apiKey.substring(apiKey.length - 4);
+  console.log(`[OpenAI] Key loaded: ${prefix}...${suffix} (length: ${apiKey.length})`);
+} else {
+  console.log("[OpenAI] WARNING: No OPENAI_API_KEY found in environment");
+}
+const openai = new OpenAI({ apiKey });
 
 // ── Dispute Letter Generator ────────────────────────────────────────────────
 export async function generateDisputeLetter(params: {

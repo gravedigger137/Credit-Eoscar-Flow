@@ -24,6 +24,7 @@ import AIPage from "@/pages/ai";
 import Bureau from "@/pages/bureau";
 import Analytics from "@/pages/analytics";
 import Calculators from "@/pages/calculators";
+import TrustAccounting from "@/pages/trust-accounting";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -57,6 +58,7 @@ function Router() {
       <Route path="/bureau">{() => <ProtectedRoute component={Bureau} />}</Route>
       <Route path="/analytics">{() => <ProtectedRoute component={Analytics} />}</Route>
       <Route path="/calculators">{() => <ProtectedRoute component={Calculators} />}</Route>
+      <Route path="/trust-accounting">{() => <ProtectedRoute component={TrustAccounting} />}</Route>
       <Route path="/billing">{() => <ProtectedRoute component={Billing} />}</Route>
       <Route path="/notifications">{() => <ProtectedRoute component={Notifications} />}</Route>
       <Route path="/compliance">{() => <ProtectedRoute component={Compliance} />}</Route>

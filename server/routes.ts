@@ -34,6 +34,11 @@ import {
   calculateLoanPayment, calculateDebtPayoff, calculateCreditRepairROI,
   calculateCompoundInterest, calculateDebtToIncomeRatio
 } from "./financial-calculator";
+import {
+  ensureLedgerTables, recordTrustDeposit, recordTrustWithdrawal, recordLedgerEntry,
+  getClientTrustAccount, getAllTrustAccounts, getLedgerEntries, getAccountSummary,
+  reconcileTrustAccounts, getTrustBalance
+} from "./trust-accounting";
 import { generateFCRADisputeLetter, DISPUTE_REASONS, type DisputeType } from "./dispute-letters";
 import { ZodError } from "zod";
 
@@ -1310,6 +1315,91 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!xml) return res.status(400).json({ message: "XML content required" });
       const parsed = parseXMLCreditReport(xml);
       res.json(parsed);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── TRUST ACCOUNTING / LEDGER ROUTES ────────────────────────────────────
+
+  app.get("/api/trust-accounts", async (_req, res) => {
+    try {
+      await ensureLedgerTables();
+      const accounts = await getAllTrustAccounts();
+      res.json(accounts);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/trust-accounts/summary", async (_req, res) => {
+    try {
+      await ensureLedgerTables();
+      const summary = await getAccountSummary();
+      res.json(summary);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/trust-accounts/reconcile", async (_req, res) => {
+    try {
+      await ensureLedgerTables();
+      const result = await reconcileTrustAccounts();
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/trust-accounts/:clientId", async (req, res) => {
+    try {
+      await ensureLedgerTables();
+      const account = await getClientTrustAccount(req.params.clientId);
+      if (!account) return res.status(404).json({ message: "No trust account found" });
+      res.json(account);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/trust-accounts/:clientId/balance", async (req, res) => {
+    try {
+      await ensureLedgerTables();
+      const balance = await getTrustBalance(req.params.clientId);
+      res.json({ clientId: req.params.clientId, balance });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/trust-accounts/:clientId/deposit", async (req, res) => {
+    try {
+      await ensureLedgerTables();
+      const { amount, description } = req.body;
+      if (!amount || amount <= 0) return res.status(400).json({ message: "Positive amount required (in cents)" });
+      const entry = await recordTrustDeposit(req.params.clientId, amount, description || "Client trust deposit");
+      res.json(entry);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/trust-accounts/:clientId/withdraw", async (req, res) => {
+    try {
+      await ensureLedgerTables();
+      const { amount, description, category } = req.body;
+      if (!amount || amount <= 0) return res.status(400).json({ message: "Positive amount required (in cents)" });
+      const entry = await recordTrustWithdrawal(req.params.clientId, amount, description || "Trust withdrawal", category || "trust_withdrawal");
+      res.json(entry);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/ledger", async (req, res) => {
+    try {
+      await ensureLedgerTables();
+      const accountId = req.query.accountId as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const entries = await getLedgerEntries(accountId, limit);
+      res.json(entries);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/ledger", async (req, res) => {
+    try {
+      await ensureLedgerTables();
+      const { accountId, type, amount, description, category } = req.body;
+      if (!accountId || !type || !amount || !description || !category) {
+        return res.status(400).json({ message: "accountId, type, amount, description, category required" });
+      }
+      const entry = await recordLedgerEntry({ accountId, type, amount, description, category });
+      res.json(entry);
     } catch (e) { handleError(res, e); }
   });
 

@@ -74,7 +74,9 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `server/financial-reports.ts` — Sales reports, revenue forecasting, credit sales POS, credit factor snapshots (priyaranjan756/Creditshelf + francheska-guzman/credit-report patterns)
 - `client/src/pages/bureau/index.tsx` — Bureau & Score Simulator page (3 tabs: Report Parser, Score Simulator, Bureau APIs) — 4 bureaus: EQ/EX/TU + CBC/Innovis
 - `client/src/pages/analytics/index.tsx` — Financial Analytics page (4 tabs: Credit Predictor, Sales Reports, Revenue Forecast, Credit Sales POS)
-- `client/src/pages/` — All 18 pages
+- `server/trust-accounting.ts` — Double-entry trust accounting ledger with reconciliation (moov-io/accounts + CGAccounting patterns)
+- `client/src/pages/trust-accounting/index.tsx` — Trust Accounting page (3 tabs: Accounts, Ledger, Reconcile)
+- `client/src/pages/` — All 19 pages
 
 ## API Routes
 
@@ -134,6 +136,14 @@ POST         /api/credit-monitor/scan (scan all clients for score changes → al
 GET          /api/credit-monitor/history/:clientId (score history timeline)
 POST         /api/credit-report/parse-xml (parse MISMO/TUNA XML credit reports)
 POST         /api/credit-predictor/default-risk (default probability prediction)
+GET          /api/trust-accounts (all client trust accounts)
+GET          /api/trust-accounts/summary (total trust funds, revenue, expenses, net income)
+GET          /api/trust-accounts/reconcile (trust fund reconciliation)
+GET          /api/trust-accounts/:clientId (single client trust account)
+GET          /api/trust-accounts/:clientId/balance (trust balance)
+POST         /api/trust-accounts/:clientId/deposit (record trust deposit)
+POST         /api/trust-accounts/:clientId/withdraw (record trust withdrawal)
+GET/POST     /api/ledger (general ledger entries)
 POST         /api/calculator/loan (loan amortization + payment schedule)
 POST         /api/calculator/debt-payoff (avalanche/snowball debt payoff plan)
 POST         /api/calculator/repair-roi (credit repair investment ROI)

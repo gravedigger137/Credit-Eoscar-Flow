@@ -4,10 +4,18 @@
  * Supports Equifax, Experian, and TransUnion report formats
  */
 
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdf = require("pdf-parse");
 import fs from "fs";
+
+let pdf: any = null;
+async function loadPdfParse() {
+  if (pdf) return pdf;
+  try {
+    pdf = (await import("pdf-parse")).default;
+  } catch {
+    pdf = null;
+  }
+  return pdf;
+}
 
 export interface ParsedAccount {
   creditorName: string;
@@ -308,8 +316,10 @@ function extractPublicRecords(text: string): { type: string; date: string; amoun
 }
 
 export async function parseCreditReportPDF(filePath: string): Promise<ParsedCreditReport> {
+  const pdfParse = await loadPdfParse();
+  if (!pdfParse) throw new Error("PDF parsing is not available");
   const buffer = fs.readFileSync(filePath);
-  const data = await pdf(buffer);
+  const data = await pdfParse(buffer);
   return parseCreditReportText(data.text);
 }
 

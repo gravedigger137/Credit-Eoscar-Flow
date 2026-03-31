@@ -102,6 +102,30 @@ function getRouteParam(param: string | string[] | undefined): string {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
+  // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) ────────────────────────────────
+  app.post("/api/book-consultation", async (req, res) => {
+    try {
+      const { name, phone, email } = req.body;
+      if (!name || !phone) return res.status(400).json({ message: "Name and phone are required" });
+      const consultation = {
+        id: Date.now().toString(36).toUpperCase(),
+        name,
+        phone,
+        email: email || null,
+        createdAt: new Date().toISOString(),
+        status: "pending",
+      };
+      console.log("[Consultation] New booking:", consultation);
+      await storage.createNotification({
+        type: "client",
+        title: "New Consultation Booking",
+        message: `${name} (${phone}${email ? ", " + email : ""}) requested a free consultation call.`,
+        read: false,
+      });
+      res.json({ success: true, message: "Consultation booked successfully", consultation });
+    } catch (err) { handleError(res, err); }
+  });
+
   // ─── DASHBOARD ─────────────────────────────────────────────────────────────
   app.get("/api/dashboard/stats", async (_req, res) => {
     try {

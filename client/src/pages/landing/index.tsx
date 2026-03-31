@@ -1,9 +1,30 @@
 import { Link } from "wouter";
-import { ShieldCheck, TrendingUp, FileText, CreditCard, Wallet, CheckCircle2, Star, ArrowRight, Phone, Mail, MapPin, Lock, Zap, Users, BarChart3 } from "lucide-react";
+import { ShieldCheck, TrendingUp, FileText, CreditCard, Wallet, CheckCircle2, Star, ArrowRight, Phone, Mail, MapPin, Lock, Zap, Users, BarChart3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
 
 export default function Landing() {
+  const [bookName, setBookName] = useState("");
+  const [bookPhone, setBookPhone] = useState("");
+  const [bookEmail, setBookEmail] = useState("");
+  const [bookSubmitted, setBookSubmitted] = useState(false);
+  const [bookLoading, setBookLoading] = useState(false);
+
+  const handleBookCall = async () => {
+    if (!bookName || !bookPhone) return;
+    setBookLoading(true);
+    try {
+      await fetch("/api/book-consultation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: bookName, phone: bookPhone, email: bookEmail }),
+      });
+    } catch {}
+    setBookLoading(false);
+    setBookSubmitted(true);
+  };
+
   return (
     <div className="min-h-screen bg-[#030712] text-white font-sans">
 
@@ -281,13 +302,53 @@ export default function Landing() {
             <Badge className="mb-6 bg-blue-800/60 text-blue-300 border-blue-700/40">Free Consultation</Badge>
             <h2 className="text-4xl font-extrabold mb-4">Ready to Fix Your Credit?</h2>
             <p className="text-white/60 text-lg mb-10 max-w-xl mx-auto">Get a free credit analysis and strategy session. No obligation. No upfront payment.</p>
-            <div className="flex flex-col md:flex-row gap-4 justify-center mb-10">
-              <input type="text" placeholder="Your Name" className="flex-1 max-w-xs px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:border-blue-500" />
-              <input type="tel" placeholder="Phone Number" className="flex-1 max-w-xs px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:border-blue-500" />
-              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8">
-                Book Free Call <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </div>
+            {bookSubmitted ? (
+              <div className="mb-10 py-8 px-6 rounded-2xl bg-emerald-900/30 border border-emerald-700/40">
+                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+                <h3 className="text-2xl font-bold mb-2">You're Booked!</h3>
+                <p className="text-white/60">We'll call you at <span className="text-white font-semibold">{bookPhone}</span> within 24 hours to start your free credit analysis.</p>
+                <p className="text-white/40 text-sm mt-2">Check your phone for a confirmation text from (888) 976-7280</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4 items-center mb-10">
+                <div className="flex flex-col md:flex-row gap-4 justify-center w-full max-w-2xl">
+                  <input
+                    type="text"
+                    placeholder="Your Name"
+                    value={bookName}
+                    onChange={(e) => setBookName(e.target.value)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:border-blue-500"
+                    data-testid="input-book-name"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Phone Number"
+                    value={bookPhone}
+                    onChange={(e) => setBookPhone(e.target.value)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:border-blue-500"
+                    data-testid="input-book-phone"
+                  />
+                </div>
+                <input
+                  type="email"
+                  placeholder="Email (optional)"
+                  value={bookEmail}
+                  onChange={(e) => setBookEmail(e.target.value)}
+                  className="w-full max-w-2xl px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/40 focus:outline-none focus:border-blue-500"
+                  data-testid="input-book-email"
+                />
+                <Button
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 py-6 text-base disabled:opacity-50"
+                  onClick={handleBookCall}
+                  disabled={!bookName || !bookPhone || bookLoading}
+                  data-testid="button-book-call"
+                >
+                  {bookLoading ? <><Loader2 className="mr-2 w-5 h-5 animate-spin" /> Booking...</> : <>Book Free Call <ArrowRight className="ml-2 w-4 h-4" /></>}
+                </Button>
+                <p className="text-white/30 text-xs">No credit card required. We'll reach out within 24 hours.</p>
+              </div>
+            )}
             <div className="grid md:grid-cols-3 gap-6 text-sm">
               {[
                 { icon: Phone, label: "Call Us", value: "(888) 976-7280", href: "tel:+18889767280" },

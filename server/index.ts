@@ -87,7 +87,8 @@ app.use((req, res, next) => {
       req.path === "/auth/logout" ||
       req.path === "/auth/me" ||
       req.path === "/auth/has-users" ||
-      req.path === "/stripe/webhook"
+      req.path === "/stripe/webhook" ||
+      req.path === "/book-consultation"
     ) {
       return next();
     }

@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   email: text("email"),
   phone: text("phone"),
   role: text("role").notNull().default("staff"),
+  oauthProvider: text("oauth_provider"),
+  oauthProviderId: text("oauth_provider_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -69,11 +69,25 @@ Key client fields: firstName, middleName, lastName, suffix, email, phone, ssn, d
 
 Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, trackingNumber, letterContent, eoscarReferenceId, bureauResponseDate
 
+## Auto-Refresh
+
+All data queries auto-refresh every 30 seconds and on window focus (staleTime: 15s, refetchInterval: 30s). Configured globally in `client/src/lib/queryClient.ts`.
+
+## Social Media Login (OAuth)
+
+Login page shows 9 social login providers: Google, Facebook, GitHub, X (Twitter), LinkedIn, Apple, Instagram, TikTok, Snapchat.
+- OAuth backend: `server/oauth.ts` — Passport.js strategies for Google, Facebook, GitHub
+- Routes: `/api/auth/{google|facebook|github}/callback`
+- Provider status: `/api/auth/providers` (public, returns which providers are configured)
+- To enable a provider, add its credentials as environment secrets (e.g. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
+- Users table has `oauthProvider` and `oauthProviderId` columns for linking accounts
+
 ## Key File Locations
 
 - `shared/schema.ts` — All DB tables, enums, insert schemas, and types
 - `server/index.ts` — Express app entry with session middleware and auth guard
 - `server/auth.ts` — Auth routes (login/register/logout/me) and requireAuth middleware
+- `server/oauth.ts` — Passport.js OAuth strategies (Google, Facebook, GitHub)
 - `server/routes.ts` — All API endpoints including Stripe checkout
 - `server/storage.ts` — DatabaseStorage class (all CRUD operations)
 - `server/ai.ts` — OpenAI integration (dispute letters, analysis, chat, Metro 2 validator)
@@ -81,7 +95,7 @@ Key dispute fields: bureau, accountName, reason, itemType, disputeMethod, tracki
 - `client/src/App.tsx` — All route registrations with ProtectedRoute guards
 - `client/src/hooks/use-auth.tsx` — AuthProvider context and useAuth hook
 - `client/src/components/layout/Shell.tsx` — Sidebar with user info and logout
-- `client/src/pages/login/index.tsx` — Login/register page
+- `client/src/pages/login/index.tsx` — Login/register page with social login
 - `server/credit-report-parser.ts` — PDF credit report parser (pdf-parse) — auto-extracts accounts, scores, negative items from EQ/EX/TU reports
 - `server/bureau-clients.ts` — Bureau API clients: EquifaxClient (@flexbase/equifax-node-client), ExperianClient (experian-node), TransUnionClient (TUNA XML)
 - `server/score-simulator.ts` — FICO score impact simulator — estimates score changes from repair actions (remove collection, pay down, add AU, etc.)

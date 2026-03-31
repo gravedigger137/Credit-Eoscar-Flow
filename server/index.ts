@@ -8,6 +8,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { authRouter, requireAuth } from "./auth";
+import { setupOAuth, registerOAuthRoutes } from "./oauth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -79,6 +80,8 @@ app.use((req, res, next) => {
 
 (async () => {
   app.use(authRouter);
+  setupOAuth();
+  registerOAuthRoutes(app);
 
   app.use("/api", (req, res, next) => {
     if (
@@ -88,7 +91,20 @@ app.use((req, res, next) => {
       req.path === "/auth/me" ||
       req.path === "/auth/has-users" ||
       req.path === "/stripe/webhook" ||
-      req.path === "/book-consultation"
+      req.path === "/book-consultation" ||
+      req.path === "/auth/providers" ||
+      req.path === "/auth/google" ||
+      req.path === "/auth/google/callback" ||
+      req.path === "/auth/facebook" ||
+      req.path === "/auth/facebook/callback" ||
+      req.path === "/auth/github" ||
+      req.path === "/auth/github/callback" ||
+      req.path === "/auth/twitter" ||
+      req.path === "/auth/twitter/callback" ||
+      req.path === "/auth/linkedin" ||
+      req.path === "/auth/linkedin/callback" ||
+      req.path === "/auth/apple" ||
+      req.path === "/auth/apple/callback"
     ) {
       return next();
     }

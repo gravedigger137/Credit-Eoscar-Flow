@@ -47,11 +47,11 @@ export default function Landing() {
                 Staff Login
               </Button>
             </Link>
-            <Link href="/login">
+            <a href="#contact">
               <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold" data-testid="button-get-started">
                 Get Started
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </header>
@@ -75,11 +75,11 @@ export default function Landing() {
             Professional credit repair, authorized user tradelines, and credit builder accounts — all under one roof. We fight the bureaus so you don't have to.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/login">
+            <a href="#contact">
               <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-blue-900/40" data-testid="button-start-consultation">
                 Start Your Free Consultation <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
-            </Link>
+            </a>
             <a href="#how">
               <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/5 font-semibold text-base px-8 py-6 rounded-xl">
                 See How It Works

@@ -569,7 +569,7 @@ export default function TrustAccounting() {
               <CardContent>
                 {chartOfAccounts ? (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {Object.entries(chartOfAccounts).map(([section, accts]: [string, any]) => (
+                    {Object.entries(chartOfAccounts).filter(([, v]) => Array.isArray(v)).map(([section, accts]: [string, any]) => (
                       <div key={section}>
                         <div className="flex items-center gap-2 mb-3">
                           {section === "assets" && <Wallet className="w-4 h-4 text-blue-500" />}
@@ -579,7 +579,7 @@ export default function TrustAccounting() {
                           <span className="font-semibold capitalize text-sm">{section}</span>
                         </div>
                         <div className="space-y-2">
-                          {accts.map((acct: any) => (
+                          {(accts || []).map((acct: any) => (
                             <div key={acct.code} className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
                               <Badge variant="outline" className="font-mono text-xs mt-0.5">{acct.code}</Badge>
                               <div>

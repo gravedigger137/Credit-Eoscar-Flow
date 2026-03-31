@@ -30,20 +30,36 @@ A professional credit repair business management platform for credit repair agen
 
 - **Dashboard** — Live stats (active clients, disputes, tradelines, revenue)
 - **Clients** — Full client management with add/edit/delete, credit score tracking, PII (SSN, DOB, ID verification), document uploads (PDF/image/Word)
-- **Disputes (e-OSCAR)** — Create and track credit bureau disputes with status, method tracking (mail/e-OSCAR), tracking numbers
+- **Disputes (e-OSCAR)** — Create and track credit bureau disputes with status, method tracking (mail/e-OSCAR), tracking numbers. Admin bypass for auto-approval.
 - **Credit Reports** — Import and analyze 3-bureau credit report pulls
-- **Tradelines** — Manage authorized user tradeline placements and orders
-- **AU Partners** — Cardholder partner roster with slot tracking, credit limits, payout/price, reporting bureaus
-- **Revolving Credit / Credit Builders** — Enroll clients in builder loans, secured cards, revolving lines
-- **Metro 2 Filings** — Full CDIA-compliant Metro 2 engine (moov-io spec), 426-byte header/base/trailer records, format converter (CSV/JSON/Metro 2), CDIA validator, submission log
+- **Tradelines** — Manage authorized user tradeline placements and orders. Admin bypass for slot limits and auto-assignment.
+- **AU Partners** — Cardholder partner roster with slot tracking, credit limits, payout/price, reporting bureaus. TradelineSupply.com highlighted as featured supplier with step-by-step guide. Admin bypass for partner access.
+- **Revolving Credit / Credit Builders** — Enroll clients in builder loans, secured cards, revolving lines. Admin bypass for auto-enrollment.
+- **Metro 2 Filings** — Full CDIA-compliant Metro 2 engine (moov-io spec), 426-byte header/base/trailer records, format converter (CSV/JSON/Metro 2), CDIA validator, submission log. Admin bypass for validation. Batch furnishing via `/api/metro2/batch-furnish`.
 - **Bureau Uploads** — Per-bureau tabs with drag-and-drop upload zone, direct portal links
+- **Bureau & Simulator** — Credit report PDF parser, 4-bureau API integrations (Equifax/Experian/TransUnion/Innovis), score simulator with 12 action types, auto-pull per client via `/api/bureau/auto-pull/:clientId`
 - **AI Command Center** — GPT-4o powered chat, dispute letter generator, client analysis, Metro 2 validator
-- **Post-Upload AI Pipeline** — When a credit report (PDF/XML/TXT) is uploaded for a client, the Consumer Credit Specialist AI automatically: 1) parses the report, 2) updates client scores, 3) analyzes every negative item with FCRA/FDCPA legal citations, 4) creates dispute letters for each item across all 3 bureaus. Manual trigger via `POST /api/clients/:id/auto-analyze`. Deduplication by creditor+bureau prevents duplicate disputes.
-- **Tradeline AI Processor** — AI-driven tradeline optimization engine: per-client partner matching with score-weighted ranking, batch parallel processing for all active clients, credit behavior analysis (risk segmentation, readiness scoring, behavioral indicators), GPT-4o strategic placement recommendations. APIs: `GET /api/tradelines/optimize/:clientId`, `POST /api/tradelines/batch-optimize`, `GET /api/tradelines/behavior/:clientId`, `POST /api/tradelines/ai-strategy/:clientId`. Automation: `tradeline_optimization` workflow in automation engine with weekly scheduling.
-- **Billing** — Transaction ledger, Stripe Checkout integration, revenue tracking by service type
+- **Trust Accounting** — QuickBooks-style trust fund management with 6-tab dashboard (Dashboard, Accounts, Ledger, Invoicing, Chart of Accounts, Reconcile). Double-entry ledger, P&L statements, professional invoice generation, chart of accounts (assets/liabilities/revenue/expenses), reconciliation. Admin bypass for billing holds.
+- **Tools** — SSN verification (format/ITIN/test detection), AI skip tracing (comprehensive person search), credit checking (soft pull with scores/risk/AI analysis), paperwork automation worker (18 document types: FCRA/FDCPA/CROA letters, contracts, invoices, reports). Admin bypass for compliance and staff restrictions.
+- **Automation** — 8 workflow types (auto_dispute, client_onboarding, score_monitoring, follow_up, letter_generation, compliance_check, bureau_auto_pull, metro2_furnishing, full_pipeline, ai_credit_worker). 5-minute scheduler, seed rules.
+- **Billing** — Transaction ledger, Stripe Checkout integration, revenue tracking by service type, usage metering. Admin bypass for billing holds.
 - **Inbox / Notifications** — Auto-generated alerts for disputes, payments, clients; live unread badge
-- **Compliance** — CROA/FCRA/FDCPA audit log, bureau contact directory (all 6 bureaus)
-- **Settings** — AI automation toggles, cybersecurity controls, Stripe & e-OSCAR config
+- **Compliance** — CROA/FCRA/FDCPA audit log, bureau contact directory (all 6 bureaus). Admin bypass for compliance checks.
+- **Settings** — 10 admin override bypass switches for all page-level operations, API key configs, Stripe & e-OSCAR config
+
+## Admin Bypass System
+
+Every major page displays an admin bypass banner when the corresponding setting is enabled in Settings. 10 bypass keys:
+- `admin_bypass_partner_access` — Partners page
+- `admin_bypass_dispute_approval` — Disputes page
+- `admin_bypass_tradeline_limits` — Tradelines page
+- `admin_bypass_billing_holds` — Billing + Trust Accounting pages
+- `admin_bypass_credit_builder_enrollment` — Revolving Credit page
+- `admin_bypass_compliance_checks` — Compliance + Tools pages
+- `admin_bypass_metro2_validation` — Metro 2 page
+- `admin_bypass_staff_restrictions` — Tools page
+- `admin_auto_import_reports` — Bureau page
+- `admin_auto_assign_tradelines` — Tradelines page
 
 ## Database Schema (shared/schema.ts)
 

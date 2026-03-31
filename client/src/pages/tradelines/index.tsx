@@ -13,6 +13,7 @@ import { Search, Plus, Filter, CreditCard, CheckCircle2, Clock } from "lucide-re
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import { AdminBypassMulti } from "@/components/admin-bypass-banner";
 
 const emptyForm = {
   clientId: "", institution: "", cardHolder: "", creditLimit: "", historyYears: "",
@@ -65,6 +66,10 @@ export default function Tradelines() {
   return (
     <Shell>
       <div className="space-y-6">
+        <AdminBypassMulti bypasses={[
+          { key: "admin_bypass_tradeline_limits", label: "Tradeline slot limits bypassed" },
+          { key: "admin_auto_assign_tradelines", label: "Auto-assign tradelines enabled" },
+        ]} />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Tradeline Management</h1>

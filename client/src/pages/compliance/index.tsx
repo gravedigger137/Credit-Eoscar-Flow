@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldCheck, FileCheck, Scale, AlertTriangle, ExternalLink, Phone, MapPin } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AdminBypassBanner } from "@/components/admin-bypass-banner";
 
 const COMPLIANCE_CHECKS = [
   { name: "CROA Compliance Audit", status: "Passed", date: "Oct 01, 2023", nextDue: "Jan 01, 2024" },
@@ -19,6 +20,7 @@ export default function Compliance() {
   return (
     <Shell>
       <div className="space-y-6">
+        <AdminBypassBanner configKey="admin_bypass_compliance_checks" label="Compliance checks bypassed for admin operations" />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Compliance & Regulations</h1>

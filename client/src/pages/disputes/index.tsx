@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { AdminBypassBanner } from "@/components/admin-bypass-banner";
 
 const BUREAU_INFO: Record<string, { address: string; phone: string }> = {
   equifax: { address: "P.O. Box 740256, Atlanta, GA 30374", phone: "1-800-685-1111" },
@@ -212,6 +213,7 @@ export default function Disputes() {
   return (
     <Shell>
       <div className="space-y-6">
+        <AdminBypassBanner configKey="admin_bypass_dispute_approval" label="All disputes auto-approved and submitted without review" />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">e-OSCAR Disputes</h1>

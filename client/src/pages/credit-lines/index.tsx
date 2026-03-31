@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import { AdminBypassBanner } from "@/components/admin-bypass-banner";
 
 const PRODUCTS = [
   { value: "builder_loan", label: "Credit Builder Loan (Self / Credit Strong)", provider: "Self / Credit Strong", icon: Lock, color: "text-blue-500", bg: "bg-blue-100 dark:bg-blue-900" },
@@ -72,6 +73,7 @@ export default function CreditLines() {
   return (
     <Shell>
       <div className="space-y-6">
+        <AdminBypassBanner configKey="admin_bypass_credit_builder_enrollment" label="Auto-enrollment in credit builder products enabled" />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Revolving Credit & Builders</h1>

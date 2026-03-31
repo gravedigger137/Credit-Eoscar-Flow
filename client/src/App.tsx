@@ -26,6 +26,7 @@ import Analytics from "@/pages/analytics";
 import Calculators from "@/pages/calculators";
 import TrustAccounting from "@/pages/trust-accounting";
 import Automation from "@/pages/automation";
+import Tools from "@/pages/tools";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -61,6 +62,7 @@ function Router() {
       <Route path="/calculators">{() => <ProtectedRoute component={Calculators} />}</Route>
       <Route path="/trust-accounting">{() => <ProtectedRoute component={TrustAccounting} />}</Route>
       <Route path="/automation">{() => <ProtectedRoute component={Automation} />}</Route>
+      <Route path="/tools">{() => <ProtectedRoute component={Tools} />}</Route>
       <Route path="/billing">{() => <ProtectedRoute component={Billing} />}</Route>
       <Route path="/notifications">{() => <ProtectedRoute component={Notifications} />}</Route>
       <Route path="/compliance">{() => <ProtectedRoute component={Compliance} />}</Route>

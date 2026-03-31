@@ -1921,6 +1921,467 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
+  // ─── SSN VERIFICATION ───────────────────────────────────────────────────────
+
+  app.post("/api/verify/ssn", async (req, res) => {
+    try {
+      const { ssn, firstName, lastName, dob } = req.body;
+      if (!ssn) return res.status(400).json({ message: "SSN is required" });
+      const cleaned = ssn.replace(/\D/g, "");
+      if (cleaned.length !== 9) return res.status(400).json({ message: "SSN must be 9 digits" });
+
+      const isInvalidArea = ["000", "666"].includes(cleaned.slice(0, 3)) || cleaned.slice(0, 3) >= "900";
+      const isInvalidGroup = cleaned.slice(3, 5) === "00";
+      const isInvalidSerial = cleaned.slice(5) === "0000";
+      const isITIN = cleaned[0] === "9" && ["7", "8"].includes(cleaned[1]);
+      const isAdvertising = cleaned >= "987654320" && cleaned <= "987654329";
+
+      const valid = !isInvalidArea && !isInvalidGroup && !isInvalidSerial && !isAdvertising;
+      const areaNumber = parseInt(cleaned.slice(0, 3));
+      const issueEra = areaNumber <= 586 ? "pre-2011-randomization" : "post-2011-randomization";
+
+      recordUsageEvent({ eventType: "ssn_verification", quantity: 1 }).catch(() => {});
+      res.json({
+        valid,
+        itin: isITIN,
+        formatted: `${cleaned.slice(0, 3)}-${cleaned.slice(3, 5)}-${cleaned.slice(5)}`,
+        last4: cleaned.slice(-4),
+        issueEra,
+        warnings: [
+          ...(!valid ? ["SSN format is invalid"] : []),
+          ...(isITIN ? ["This appears to be an ITIN, not an SSN"] : []),
+          ...(isAdvertising ? ["This is a known advertising/test SSN"] : []),
+        ],
+        nameMatch: firstName && lastName ? { provided: `${firstName} ${lastName}`, status: "verification_required" } : null,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── SKIP TRACING ─────────────────────────────────────────────────────────
+
+  app.post("/api/skip-trace", async (req, res) => {
+    try {
+      const { firstName, lastName, email, phone, address, city, state, zip, ssn } = req.body;
+      if (!firstName || !lastName) return res.status(400).json({ message: "First and last name required" });
+
+      const prompt = `You are a skip tracing AI specialist. Given the following information about a person, generate a comprehensive skip trace report with all likely current and previous contact information, addresses, and associated records.
+
+Name: ${firstName} ${lastName}
+${email ? `Email: ${email}` : ""}
+${phone ? `Phone: ${phone}` : ""}
+${address ? `Address: ${address}, ${city || ""}, ${state || ""} ${zip || ""}` : ""}
+${ssn ? `SSN Last 4: ${ssn.slice(-4)}` : ""}
+
+Generate a detailed skip trace report with:
+1. IDENTITY VERIFICATION - Name variants, DOB range, SSN validation
+2. CURRENT ADDRESS - Best known current residence
+3. PREVIOUS ADDRESSES - Last 5 known addresses with dates
+4. PHONE NUMBERS - Current and previous (landline, mobile, VoIP)
+5. EMAIL ADDRESSES - All known email addresses
+6. EMPLOYMENT - Current and previous employers
+7. ASSOCIATES - Known relatives and associates
+8. PUBLIC RECORDS - Liens, judgments, bankruptcies, UCCs
+9. SOCIAL MEDIA - Identified profiles
+10. CREDIT HEADER DATA - Summary from credit bureau headers
+11. CONFIDENCE SCORE - Overall data confidence (0-100)
+
+Format as structured data.`;
+
+      const analysis = await chatWithAI(prompt);
+      recordUsageEvent({ eventType: "skip_trace", metadata: { name: `${firstName} ${lastName}` }, quantity: 1 }).catch(() => {});
+
+      res.json({
+        subject: { firstName, lastName, email, phone },
+        report: analysis,
+        timestamp: new Date().toISOString(),
+        source: "ai_analysis",
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── CREDIT CHECK (SOFT PULL SIMULATION) ──────────────────────────────────
+
+  app.post("/api/credit-check", async (req, res) => {
+    try {
+      const { clientId, checkType } = req.body;
+      if (!clientId) return res.status(400).json({ message: "clientId required" });
+
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const scores: Record<string, number | null> = {
+        equifax: client.equifaxScore ?? null,
+        experian: client.experianScore ?? null,
+        transunion: client.transunionScore ?? null,
+      };
+      const avgScore = Object.values(scores).filter(Boolean).reduce((a: number, b) => a + (b || 0), 0) /
+        Math.max(Object.values(scores).filter(Boolean).length, 1);
+
+      const disputes = await storage.getDisputesByClient(clientId);
+      const tradelines = (await storage.getTradelines()).filter((t: any) => t.clientId === clientId);
+      const reports = await storage.getReportsByClient(clientId);
+
+      const riskLevel = avgScore >= 700 ? "low" : avgScore >= 600 ? "medium" : avgScore >= 500 ? "high" : "critical";
+      const creditworthy = avgScore >= 620;
+
+      let aiSummary = "";
+      try {
+        aiSummary = await analyzeClientCredit({
+          clientName: `${client.firstName} ${client.lastName}`,
+          scores: Object.fromEntries(Object.entries(scores).filter(([, v]) => v !== null)) as Record<string, number>,
+          negativeItems: disputes.map((d: any) => d.accountName),
+          goal: client.goalScore ? `Reach ${client.goalScore}` : undefined,
+        });
+      } catch {}
+
+      recordUsageEvent({ eventType: "credit_check", metadata: { clientId, checkType: checkType || "soft" }, quantity: 1 }).catch(() => {});
+
+      res.json({
+        client: { id: client.id, name: `${client.firstName} ${client.lastName}` },
+        scores,
+        averageScore: Math.round(avgScore),
+        riskLevel,
+        creditworthy,
+        openDisputes: disputes.filter((d: any) => d.status === "preparing" || d.status === "sent").length,
+        activeTradelines: tradelines.filter((t: any) => t.status === "active" || t.status === "placed").length,
+        reportsOnFile: reports.length,
+        aiAnalysis: aiSummary,
+        checkType: checkType || "soft",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── PAPERWORK AUTOMATION WORKER ──────────────────────────────────────────
+
+  app.post("/api/paperwork/generate", async (req, res) => {
+    try {
+      const { clientId, documentType, customInstructions } = req.body;
+      if (!clientId || !documentType) return res.status(400).json({ message: "clientId and documentType required" });
+
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const disputes = await storage.getDisputesByClient(clientId);
+      const clientName = `${client.firstName} ${client.lastName}`;
+      const clientAddress = [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ");
+
+      const DOC_TYPES: Record<string, string> = {
+        "fcra_dispute": "FCRA Section 611 Dispute Letter to credit bureau requesting investigation of inaccurate items",
+        "fdcpa_validation": "FDCPA Section 809 Debt Validation Letter demanding proof of debt from collector",
+        "fcba_billing_error": "FCBA Billing Error Dispute Letter for unauthorized charges or billing mistakes",
+        "cease_desist": "Cease and Desist Letter ordering debt collector to stop all contact",
+        "goodwill_letter": "Goodwill Adjustment Letter requesting removal of negative item based on positive payment history",
+        "pay_for_delete": "Pay-for-Delete Settlement Letter offering payment in exchange for removal of negative reporting",
+        "intent_to_sue": "Intent to Sue Letter for FCRA/FDCPA violations with 15-day cure notice",
+        "cfpb_complaint": "CFPB Complaint Narrative for filing with Consumer Financial Protection Bureau",
+        "ag_complaint": "Attorney General Complaint Letter for state-level consumer protection enforcement",
+        "id_theft_affidavit": "FTC Identity Theft Affidavit (Form 14039) for fraudulent accounts",
+        "credit_freeze": "Credit Freeze/Thaw Request Letter for all three bureaus",
+        "opt_out": "Pre-Screened Offer Opt-Out Letter to reduce hard inquiries from prescreened offers",
+        "authorized_user_agreement": "Authorized User Agreement between cardholder partner and credit repair company",
+        "client_engagement": "Client Engagement Agreement for credit repair services (CROA-compliant)",
+        "power_of_attorney": "Limited Power of Attorney for credit repair representative actions",
+        "right_to_cancel": "Notice of Right to Cancel (CROA § 1679e) — 3-day cancellation notice",
+        "invoice": "Professional invoice for credit repair services rendered",
+        "progress_report": "Client Progress Report summarizing score changes, disputes, and tradeline activity",
+      };
+
+      const docDescription = DOC_TYPES[documentType] || documentType;
+
+      const prompt = `You are a Consumer Credit Law Expert and Document Specialist. Generate a complete, professional, legally-compliant document.
+
+DOCUMENT TYPE: ${docDescription}
+
+CLIENT INFO:
+- Name: ${clientName}
+- Address: ${clientAddress || "On file"}
+- SSN Last 4: ${client.ssn ? client.ssn.slice(-4) : "XXXX"}
+- Date of Birth: ${client.dateOfBirth || "On file"}
+
+DISPUTE HISTORY:
+${disputes.length > 0 ? disputes.slice(0, 10).map((d: any) => `- ${d.accountName} (${d.bureau}) — Status: ${d.status}`).join("\n") : "No disputes on file"}
+
+${customInstructions ? `ADDITIONAL INSTRUCTIONS: ${customInstructions}` : ""}
+
+Generate the COMPLETE document ready to print and mail. Include:
+- Proper header with date and addresses
+- All required legal citations (FCRA, FDCPA, FCBA, CROA as applicable)
+- Specific account details from client records
+- Proper signature line
+- Certified mail / return receipt notation where appropriate
+- All legally required disclosures`;
+
+      const document = await chatWithAI(prompt);
+      recordUsageEvent({ eventType: "paperwork_generated", metadata: { clientId, documentType }, quantity: 1 }).catch(() => {});
+
+      res.json({
+        clientId,
+        clientName,
+        documentType,
+        documentTitle: docDescription,
+        content: document,
+        generatedAt: new Date().toISOString(),
+        availableTypes: Object.entries(DOC_TYPES).map(([key, desc]) => ({ key, description: desc })),
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/paperwork/types", (_req, res) => {
+    res.json([
+      { key: "fcra_dispute", label: "FCRA Dispute Letter", category: "disputes" },
+      { key: "fdcpa_validation", label: "FDCPA Debt Validation", category: "disputes" },
+      { key: "fcba_billing_error", label: "FCBA Billing Error", category: "disputes" },
+      { key: "cease_desist", label: "Cease & Desist", category: "disputes" },
+      { key: "goodwill_letter", label: "Goodwill Letter", category: "disputes" },
+      { key: "pay_for_delete", label: "Pay-for-Delete", category: "disputes" },
+      { key: "intent_to_sue", label: "Intent to Sue", category: "legal" },
+      { key: "cfpb_complaint", label: "CFPB Complaint", category: "legal" },
+      { key: "ag_complaint", label: "AG Complaint", category: "legal" },
+      { key: "id_theft_affidavit", label: "ID Theft Affidavit", category: "legal" },
+      { key: "credit_freeze", label: "Credit Freeze Request", category: "bureau" },
+      { key: "opt_out", label: "Pre-Screened Opt-Out", category: "bureau" },
+      { key: "authorized_user_agreement", label: "AU Agreement", category: "contracts" },
+      { key: "client_engagement", label: "Client Agreement", category: "contracts" },
+      { key: "power_of_attorney", label: "Limited POA", category: "contracts" },
+      { key: "right_to_cancel", label: "Right to Cancel", category: "contracts" },
+      { key: "invoice", label: "Invoice", category: "billing" },
+      { key: "progress_report", label: "Progress Report", category: "reports" },
+    ]);
+  });
+
+  // ─── AUTOMATED BUREAU PULL PER CLIENT ─────────────────────────────────────
+
+  app.post("/api/bureau/auto-pull/:clientId", async (req, res) => {
+    try {
+      const { clientId } = req.params;
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+      if (!client.ssn) return res.status(400).json({ message: "Client SSN required for bureau pull" });
+
+      const request = {
+        firstName: client.firstName,
+        lastName: client.lastName,
+        ssn: client.ssn,
+        dob: client.dateOfBirth || "",
+        address: client.address || "",
+        city: client.city || "",
+        state: client.state || "",
+        zip: client.zip || "",
+      };
+
+      const results = await pullAllBureauReports(request);
+      const saved: any[] = [];
+
+      for (const br of results) {
+        if (br.success) {
+          const report = await storage.createReport({
+            clientId,
+            bureau: br.bureau,
+            reportData: br.rawData,
+            score: br.score,
+            negativeItems: [],
+          });
+          saved.push({ bureau: br.bureau, score: br.score, reportId: report.id });
+
+          if (br.score) {
+            const update: any = {};
+            if (br.bureau === "equifax") update.equifaxScore = br.score;
+            else if (br.bureau === "experian") update.experianScore = br.score;
+            else if (br.bureau === "transunion") update.transunionScore = br.score;
+            if (Object.keys(update).length) await storage.updateClient(clientId, update);
+          }
+          recordUsageEvent({ eventType: "bureau_pull", metadata: { bureau: br.bureau, clientId, automated: true }, quantity: 1 }).catch(() => {});
+        }
+      }
+
+      const analyze = req.body.analyze !== false;
+      let aiAnalysis = null;
+      if (analyze) {
+        try {
+          const scores: Record<string, number> = {};
+          for (const br of results) { if (br.score) scores[br.bureau] = br.score; }
+          if (Object.keys(scores).length > 0) {
+            const disputes = await storage.getDisputesByClient(clientId);
+            aiAnalysis = await analyzeClientCredit({
+              clientName: `${client.firstName} ${client.lastName}`,
+              scores,
+              negativeItems: disputes.map((d: any) => d.accountName),
+            });
+          }
+        } catch {}
+      }
+
+      res.json({
+        clientId,
+        clientName: `${client.firstName} ${client.lastName}`,
+        results: results.map(r => ({ bureau: r.bureau, success: r.success, score: r.score, error: r.error })),
+        savedReports: saved,
+        aiAnalysis,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── METRO 2 BATCH FURNISHING ─────────────────────────────────────────────
+
+  app.post("/api/metro2/batch-furnish", async (req, res) => {
+    try {
+      const { bureaus, companyId, companyName } = req.body;
+      const targetBureaus = bureaus || ["equifax", "experian", "transunion"];
+      const cid = companyId || "CRP001";
+      const cname = companyName || "CreditRepair Pro LLC";
+
+      const clients = await storage.getClients();
+      const tradelines = await storage.getTradelines();
+      const activeTL = tradelines.filter((t: any) => t.status === "active" || t.status === "placed");
+      const results: any[] = [];
+
+      for (const client of clients) {
+        if (client.status !== "active" || !client.ssn) continue;
+        const clientTL = activeTL.filter((t: any) => t.clientId === client.id);
+        if (clientTL.length === 0) continue;
+
+        const records: any[] = clientTL.map((tl: any) => ({
+          client: client,
+          accountNumber: `AU-${client.id.slice(0, 8)}-${tl.id.slice(0, 4)}`,
+          portfolioType: "R" as const,
+          accountType: "18",
+          accountStatus: "11",
+          ecoaCode: "3",
+          creditLimit: tl.creditLimit || 0,
+          currentBalance: 0,
+          dateOpened: tl.createdAt || new Date().toISOString(),
+          dateOfAccountInfo: new Date().toISOString(),
+          paymentHistory: "111111111111111111111111",
+          companyId: cid,
+          reportType: "M" as const,
+        }));
+
+        for (const bureau of targetBureaus) {
+          try {
+            const file = buildMetro2File(records, cid, cname);
+            const submission = await storage.createMetro2Submission({
+              clientId: client.id, bureau, accountNumber: `AU-${client.id.slice(0, 8)}`,
+              portfolioType: "R", accountStatus: "11", ecoaCode: "3",
+              creditLimit: clientTL.reduce((s: number, t: any) => s + (t.creditLimit || 0), 0),
+              currentBalance: 0, status: "generated", fileContent: file,
+              reportType: "M", submittedAt: null,
+            });
+            results.push({ clientId: client.id, clientName: `${client.firstName} ${client.lastName}`, bureau, submissionId: submission.id, records: records.length });
+            recordUsageEvent({ eventType: "metro2_generated", metadata: { bureau, clientId: client.id, batch: true }, quantity: 1 }).catch(() => {});
+          } catch {}
+        }
+      }
+
+      const uniqueClients = new Set(results.map((r: any) => r.clientId)).size;
+      res.json({ totalClients: uniqueClients, totalSubmissions: results.length, submissions: results });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── ENHANCED TRUST ACCOUNTING ROUTES ─────────────────────────────────────
+
+  app.post("/api/trust-accounts/invoice", async (req, res) => {
+    try {
+      const { clientId, items, dueDate, notes } = req.body;
+      if (!clientId || !items || !Array.isArray(items)) return res.status(400).json({ message: "clientId and items[] required" });
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const totalCents = items.reduce((sum: number, item: any) => sum + Math.round((item.amount || 0) * (item.quantity || 1) * 100), 0);
+      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
+
+      const invoiceData = {
+        invoiceNumber,
+        clientId,
+        clientName: `${client.firstName} ${client.lastName}`,
+        clientEmail: client.email,
+        items: items.map((item: any) => ({
+          description: item.description,
+          quantity: item.quantity || 1,
+          unitPrice: Math.round((item.amount || 0) * 100),
+          total: Math.round((item.amount || 0) * (item.quantity || 1) * 100),
+        })),
+        subtotal: totalCents,
+        tax: 0,
+        total: totalCents,
+        dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "pending",
+        notes: notes || "",
+        createdAt: new Date().toISOString(),
+        companyName: "CreditRepair Pro LLC",
+        companyAddress: "Nationwide (Remote)",
+        companyPhone: "(888) 976-7280",
+        companyEmail: "support@infinitearcadia.com",
+      };
+
+      recordUsageEvent({ eventType: "invoice_generated", metadata: { clientId, invoiceNumber }, quantity: 1 }).catch(() => {});
+      res.json(invoiceData);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/trust-accounts/chart-of-accounts", (_req, res) => {
+    res.json({
+      assets: [
+        { code: "1000", name: "Client Trust Account", type: "asset", subtype: "current", description: "Funds held in trust for clients" },
+        { code: "1100", name: "Operating Cash", type: "asset", subtype: "current", description: "Company operating funds" },
+        { code: "1200", name: "Accounts Receivable", type: "asset", subtype: "current", description: "Outstanding client invoices" },
+        { code: "1500", name: "Prepaid Bureau Fees", type: "asset", subtype: "current", description: "Prepaid bureau API subscription fees" },
+      ],
+      liabilities: [
+        { code: "2000", name: "Client Trust Liability", type: "liability", subtype: "current", description: "Obligation to return client trust funds" },
+        { code: "2100", name: "Accounts Payable", type: "liability", subtype: "current", description: "Outstanding bills to vendors/partners" },
+        { code: "2200", name: "Unearned Revenue", type: "liability", subtype: "current", description: "Prepaid service fees not yet earned" },
+        { code: "2300", name: "Partner Payouts Payable", type: "liability", subtype: "current", description: "Owed tradeline partner payouts" },
+      ],
+      revenue: [
+        { code: "4000", name: "Credit Repair Service Fees", type: "revenue", description: "Monthly credit repair subscription fees" },
+        { code: "4100", name: "Tradeline Placement Revenue", type: "revenue", description: "Revenue from AU tradeline placements" },
+        { code: "4200", name: "Credit Builder Revenue", type: "revenue", description: "Revenue from credit builder product enrollments" },
+        { code: "4300", name: "Consultation Fees", type: "revenue", description: "One-time consultation and setup fees" },
+      ],
+      expenses: [
+        { code: "5000", name: "Bureau API Costs", type: "expense", description: "Equifax/Experian/TransUnion API usage fees" },
+        { code: "5100", name: "Partner Payouts", type: "expense", description: "Payments to AU tradeline cardholders" },
+        { code: "5200", name: "Software & Tools", type: "expense", description: "CRM, e-OSCAR, and other platform costs" },
+        { code: "5300", name: "AI/GPT Usage", type: "expense", description: "OpenAI API costs for dispute letters and analysis" },
+        { code: "5400", name: "Marketing", type: "expense", description: "Advertising and client acquisition costs" },
+        { code: "5500", name: "Insurance & Compliance", type: "expense", description: "E&O insurance, bond, and compliance costs" },
+      ],
+    });
+  });
+
+  app.post("/api/trust-accounts/profit-loss", async (_req, res) => {
+    try {
+      const summary = await getAccountSummary();
+      const accounts = await getAllTrustAccounts();
+      const entries = await getLedgerEntries(undefined, 200);
+
+      const byCategory: Record<string, number> = {};
+      for (const e of entries) {
+        const key = `${e.type}_${e.category}`;
+        byCategory[key] = (byCategory[key] || 0) + e.amount;
+      }
+
+      res.json({
+        period: "Current Period",
+        revenue: {
+          serviceFees: byCategory["debit_service_fee"] || 0,
+          partnerPayouts: byCategory["debit_partner_payout"] || 0,
+          totalRevenue: summary.totalRevenue,
+        },
+        expenses: {
+          bureauFees: byCategory["debit_bureau_fee"] || 0,
+          refunds: byCategory["debit_refund"] || 0,
+          totalExpenses: summary.totalExpenses,
+        },
+        netIncome: summary.netIncome,
+        trustFunds: summary.totalTrustFunds,
+        accountsCount: summary.accountsCount,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
   seedDefaultRules().catch(() => {});
   startScheduler();
 

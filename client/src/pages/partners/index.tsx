@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { AdminBypassBanner } from "@/components/admin-bypass-banner";
 
 const EMPTY_FORM = {
   name: "",
@@ -204,7 +205,7 @@ export default function Partners() {
   return (
     <Shell>
       <div className="space-y-6">
-        {/* Header */}
+        <AdminBypassBanner configKey="admin_bypass_partner_access" label="Full automated access to all supplier inventories" />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">AU Partners & Suppliers</h1>
@@ -508,18 +509,36 @@ export default function Partners() {
             </Card>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {WHOLESALE_SUPPLIERS.map((s, i) => (
-                <Card key={i} data-testid={`card-supplier-${i}`} className="glass-panel flex flex-col">
+              {WHOLESALE_SUPPLIERS.map((s, i) => {
+                const isFeatured = s.name === "TradelineSupply.com";
+                return (
+                <Card key={i} data-testid={`card-supplier-${i}`} className={`glass-panel flex flex-col ${isFeatured ? "border-primary ring-2 ring-primary/20 shadow-lg" : ""}`}>
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <CardTitle className="text-base">{s.name}</CardTitle>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          {s.name}
+                          {isFeatured && <Badge className="bg-primary text-primary-foreground text-[10px]"><Star className="w-3 h-3 mr-0.5" /> Featured</Badge>}
+                        </CardTitle>
                         <CardDescription className="mt-0.5">{s.type}</CardDescription>
                       </div>
-                      <Badge variant="outline" className="border-primary/50 text-primary">
+                      <Badge variant="outline" className={isFeatured ? "border-primary text-primary" : "border-primary/50 text-primary"}>
                         <Shield className="w-3 h-3 mr-1" /> Verified
                       </Badge>
                     </div>
+                    {isFeatured && (
+                      <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 mt-3">
+                        <div className="text-xs font-semibold text-primary mb-1">HOW IT WORKS:</div>
+                        <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                          <li>Sign up for a free reseller account at TradelineSupply.com</li>
+                          <li>Access their broker dashboard with 500+ available tradelines</li>
+                          <li>Browse by limit ($5K-$100K+), age (2-25+ years), and bank</li>
+                          <li>Order at wholesale, set your own markup, and assign to clients</li>
+                          <li>Lines post to client reports within 1-2 billing cycles</li>
+                          <li>Track all orders via their real-time broker portal</li>
+                        </ol>
+                      </div>
+                    )}
                   </CardHeader>
                   <CardContent className="flex-1 space-y-4 pb-3">
                     <p className="text-sm text-muted-foreground">{s.description}</p>
@@ -556,7 +575,8 @@ export default function Partners() {
                     </Button>
                   </CardFooter>
                 </Card>
-              ))}
+                );
+              })}
             </div>
 
             <Card className="glass-panel border-primary/20">

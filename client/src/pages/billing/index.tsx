@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { AdminBypassBanner } from "@/components/admin-bypass-banner";
 
 const emptyTxn = { clientId: "", type: "tradeline", description: "", amount: "", status: "completed" };
 
@@ -58,6 +59,7 @@ export default function Billing() {
   return (
     <Shell>
       <div className="space-y-6">
+        <AdminBypassBanner configKey="admin_bypass_billing_holds" label="Billing holds bypassed — services activated without payment" />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Billing & Revenue</h1>

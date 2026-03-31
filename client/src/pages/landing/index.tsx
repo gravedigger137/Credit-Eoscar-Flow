@@ -26,11 +26,11 @@ export default function Landing() {
                 Staff Login
               </Button>
             </Link>
-            <a href="#contact">
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold">
+            <Link href="/login">
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold" data-testid="button-get-started">
                 Get Started
               </Button>
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -54,11 +54,11 @@ export default function Landing() {
             Professional credit repair, authorized user tradelines, and credit builder accounts — all under one roof. We fight the bureaus so you don't have to.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="#contact">
-              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-blue-900/40">
+            <Link href="/login">
+              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-blue-900/40" data-testid="button-start-consultation">
                 Start Your Free Consultation <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
-            </a>
+            </Link>
             <a href="#how">
               <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/5 font-semibold text-base px-8 py-6 rounded-xl">
                 See How It Works
@@ -290,14 +290,18 @@ export default function Landing() {
             </div>
             <div className="grid md:grid-cols-3 gap-6 text-sm">
               {[
-                { icon: Phone, label: "Call Us", value: "(800) 555-0199" },
-                { icon: Mail, label: "Email Us", value: "help@creditrepairpro.com" },
-                { icon: MapPin, label: "Location", value: "Nationwide (Remote)" },
+                { icon: Phone, label: "Call Us", value: "(888) 976-7280", href: "tel:+18889767280" },
+                { icon: Mail, label: "Email Us", value: "support@infinitearcadia.com", href: "mailto:support@infinitearcadia.com" },
+                { icon: MapPin, label: "Location", value: "Nationwide (Remote)", href: null },
               ].map((c, i) => (
                 <div key={i} className="flex items-center gap-3 justify-center text-white/60">
                   <c.icon className="w-4 h-4 text-blue-400" />
                   <span className="text-white/40">{c.label}:</span>
-                  <span>{c.value}</span>
+                  {c.href ? (
+                    <a href={c.href} className="hover:text-white transition-colors underline" data-testid={`link-contact-${c.label.toLowerCase().replace(/\s/g, "-")}`}>{c.value}</a>
+                  ) : (
+                    <span>{c.value}</span>
+                  )}
                 </div>
               ))}
             </div>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { AdminBypassBanner } from "@/components/admin-bypass-banner";
 
 const BUREAUS = [
   { id: "all", name: "All Bureaus" },
@@ -151,7 +152,7 @@ export default function Metro2() {
   return (
     <Shell>
       <div className="space-y-6">
-        {/* Header */}
+        <AdminBypassBanner configKey="admin_bypass_metro2_validation" label="Metro 2 validation bypassed — submissions processed without format checks" />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Metro 2 Submissions</h1>

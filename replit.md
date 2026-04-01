@@ -45,6 +45,9 @@ A professional credit repair business management platform for credit repair agen
 - **Billing** — Transaction ledger, Stripe Checkout integration, revenue tracking by service type, usage metering. Admin bypass for billing holds.
 - **Inbox / Notifications** — Auto-generated alerts for disputes, payments, clients; live unread badge
 - **Compliance** — CROA/FCRA/FDCPA audit log, bureau contact directory (all 6 bureaus). Admin bypass for compliance checks.
+- **Banking & Lending** — Plaid bank account linking, balance tracking, transaction history, liability data. AI-powered loan pre-qualification, 12-lender directory (LendingClub, SoFi, Upstart, Avant, etc.), loan application management. Admin bypass for billing holds.
+- **Crypto & DeFi** — MetaMask wallet connection, manual wallet CRUD, multi-chain support (Ethereum, Polygon, BNB, Arbitrum, Optimism, Avalanche, Base), DeFi protocol directory (Uniswap, Aave, Compound, Curve, Lido, MakerDAO, 1inch, Yearn). Etherscan links.
+- **Automated Onboarding** — 12-step pipeline engine (welcome → identity → credit auth → documents → report pull → AI analysis → dispute plan → bank linking → payment → engagement letter → tradeline matching → complete). Book consultation auto-creates client and initializes pipeline.
 - **Settings** — 10 admin override bypass switches for all page-level operations, API key configs, Stripe & e-OSCAR config
 
 ## Admin Bypass System
@@ -63,7 +66,7 @@ Every major page displays an admin bypass banner when the corresponding setting 
 
 ## Database Schema (shared/schema.ts)
 
-Tables: `users`, `clients`, `disputes`, `credit_reports`, `tradelines`, `credit_lines`, `transactions`, `notifications`, `cardholder_partners`, `metro2_submissions`, `client_documents`, `api_configs`
+Tables: `users`, `clients`, `disputes`, `credit_reports`, `tradelines`, `credit_lines`, `transactions`, `notifications`, `cardholder_partners`, `metro2_submissions`, `client_documents`, `api_configs`, `onboarding_steps`, `bank_accounts`, `crypto_wallets`, `loan_applications`, `ui_customization`
 
 Key client fields: firstName, middleName, lastName, suffix, email, phone, ssn, dob, address, city, state, zip, previousAddress, idType, idNumber
 
@@ -112,7 +115,11 @@ Login page shows 9 social login providers: Google, Facebook, GitHub, X (Twitter)
 - `client/src/pages/trust-accounting/index.tsx` — Trust Accounting page (3 tabs: Accounts, Ledger, Reconcile)
 - `server/automation-engine.ts` — Full automation engine with 14 workflow types, scheduled runner, event-driven triggers, run history tracking
 - `client/src/pages/automation/index.tsx` — Automation page (3 tabs: Rules, Run History, Workflows) — create/toggle/execute automation rules
-- `client/src/pages/` — All 20 pages
+- `server/onboarding-engine.ts` — 12-step automated client onboarding pipeline (welcome → identity → credit auth → docs → report pull → AI analysis → dispute plan → bank linking → payment → engagement letter → tradeline matching → complete)
+- `server/plaid-client.ts` — Plaid banking API integration (link token, account sync, transactions, liabilities)
+- `client/src/pages/banking/index.tsx` — Banking & Lending page (4 tabs: Bank Accounts, Loan Applications, Lender Directory, Overview)
+- `client/src/pages/crypto/index.tsx` — Crypto & DeFi page (3 tabs: Wallets, DeFi Protocols, Chains)
+- `client/src/pages/` — All 22 pages
 
 ## API Routes
 
@@ -201,6 +208,29 @@ POST         /api/calculator/repair-roi (credit repair investment ROI)
 POST         /api/calculator/compound-interest (compound interest projections)
 POST         /api/calculator/dti (debt-to-income ratio analysis)
 GET          /api/bureau/status-all (all 4 bureaus: EQ/EX/TU/Innovis)
+GET          /api/onboarding/:clientId (get/initialize onboarding steps)
+POST         /api/onboarding/:clientId/advance (advance onboarding step)
+POST         /api/onboarding/:clientId/auto-advance (auto-advance next step)
+GET          /api/onboarding-steps (list all 12 step definitions)
+GET          /api/plaid/status (check if Plaid is configured)
+POST         /api/plaid/create-link-token (Plaid Link token)
+POST         /api/plaid/exchange-token (exchange public token + save accounts)
+GET          /api/bank-accounts (all bank accounts)
+GET          /api/bank-accounts/:clientId (client bank accounts)
+POST         /api/bank-accounts/:id/sync (refresh balances from Plaid)
+GET          /api/bank-accounts/:id/transactions (90-day transaction history)
+GET          /api/bank-accounts/:id/liabilities (liability data)
+GET          /api/crypto-wallets (all crypto wallets)
+GET          /api/crypto-wallets/:clientId (client wallets)
+POST         /api/crypto-wallets (add wallet)
+DELETE       /api/crypto-wallets/:id (remove wallet)
+GET          /api/loans (all loan applications)
+GET          /api/loans/:clientId (client loan apps)
+POST         /api/loans (create with AI pre-qualification)
+PATCH        /api/loans/:id (update loan status)
+GET          /api/lenders (12-lender directory)
+GET          /api/ui-customization (read all UI settings)
+POST         /api/ui-customization (save UI settings)
 ```
 
 ## Environment Variables Required
@@ -210,6 +240,7 @@ GET          /api/bureau/status-all (all 4 bureaus: EQ/EX/TU/Innovis)
 - `STRIPE_SECRET_KEY` — For live Stripe payment processing
 - `STRIPE_WEBHOOK_SECRET` — For Stripe webhook signature verification
 - `SESSION_SECRET` — For session encryption (optional, has fallback)
+- `PLAID_CLIENT_ID` / `PLAID_SECRET` / `PLAID_ENV` — For Plaid bank integration (optional)
 
 ## Design System
 

@@ -255,6 +255,92 @@ export const insertClientDocumentSchema = createInsertSchema(clientDocuments).om
 export type InsertClientDocument = z.infer<typeof insertClientDocumentSchema>;
 export type ClientDocument = typeof clientDocuments.$inferSelect;
 
+// ─── ONBOARDING STEPS ─────────────────────────────────────────────────────
+export const onboardingSteps = pgTable("onboarding_steps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  step: text("step").notNull(),
+  label: text("label").notNull(),
+  status: text("status").notNull().default("pending"),
+  data: text("data"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertOnboardingStepSchema = createInsertSchema(onboardingSteps).omit({ id: true, createdAt: true });
+export type InsertOnboardingStep = z.infer<typeof insertOnboardingStepSchema>;
+export type OnboardingStep = typeof onboardingSteps.$inferSelect;
+
+// ─── PLAID BANK ACCOUNTS ─────────────────────────────────────────────────
+export const bankAccounts = pgTable("bank_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  plaidItemId: text("plaid_item_id"),
+  plaidAccessToken: text("plaid_access_token"),
+  institutionName: text("institution_name").notNull(),
+  institutionId: text("institution_id"),
+  accountName: text("account_name").notNull(),
+  accountType: text("account_type").notNull(),
+  accountSubtype: text("account_subtype"),
+  mask: text("mask"),
+  balanceCurrent: integer("balance_current"),
+  balanceAvailable: integer("balance_available"),
+  balanceLimit: integer("balance_limit"),
+  status: text("status").notNull().default("active"),
+  lastSynced: timestamp("last_synced"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBankAccountSchema = createInsertSchema(bankAccounts).omit({ id: true, createdAt: true });
+export type InsertBankAccount = z.infer<typeof insertBankAccountSchema>;
+export type BankAccount = typeof bankAccounts.$inferSelect;
+
+// ─── CRYPTO WALLETS ──────────────────────────────────────────────────────
+export const cryptoWallets = pgTable("crypto_wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").references(() => clients.id, { onDelete: "cascade" }),
+  walletAddress: text("wallet_address").notNull(),
+  walletType: text("wallet_type").notNull().default("metamask"),
+  chainId: integer("chain_id").default(1),
+  label: text("label"),
+  balanceEth: text("balance_eth"),
+  balanceUsd: text("balance_usd"),
+  lastSynced: timestamp("last_synced"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCryptoWalletSchema = createInsertSchema(cryptoWallets).omit({ id: true, createdAt: true });
+export type InsertCryptoWallet = z.infer<typeof insertCryptoWalletSchema>;
+export type CryptoWallet = typeof cryptoWallets.$inferSelect;
+
+// ─── LOAN APPLICATIONS ──────────────────────────────────────────────────
+export const loanApplications = pgTable("loan_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  loanType: text("loan_type").notNull(),
+  amount: integer("amount").notNull(),
+  termMonths: integer("term_months"),
+  interestRate: text("interest_rate"),
+  lender: text("lender"),
+  status: text("status").notNull().default("draft"),
+  prequalified: boolean("prequalified").default(false),
+  aiRecommendation: text("ai_recommendation"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLoanApplicationSchema = createInsertSchema(loanApplications).omit({ id: true, createdAt: true });
+export type InsertLoanApplication = z.infer<typeof insertLoanApplicationSchema>;
+export type LoanApplication = typeof loanApplications.$inferSelect;
+
+// ─── UI CUSTOMIZATION ────────────────────────────────────────────────────
+export const uiCustomization = pgTable("ui_customization", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // ─── API CONFIGS ──────────────────────────────────────────────────────────
 export const apiConfigs = pgTable("api_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

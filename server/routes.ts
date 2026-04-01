@@ -54,6 +54,11 @@ import {
   dispatchEvent
 } from "./automation-engine";
 import { ZodError } from "zod";
+import { initializeOnboarding, advanceOnboarding, autoOnboardFromBooking, ONBOARDING_STEPS } from "./onboarding-engine";
+import { createLinkToken, exchangePublicToken, getAccounts, getTransactions, getLiabilities, isPlaidConfigured } from "./plaid-client";
+import { db } from "./db";
+import { onboardingSteps, bankAccounts, cryptoWallets, loanApplications, uiCustomization } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -102,27 +107,27 @@ function getRouteParam(param: string | string[] | undefined): string {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
-  // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) ────────────────────────────────
+  // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) + AUTO-ONBOARDING ──────────────
   app.post("/api/book-consultation", async (req, res) => {
     try {
       const { name, phone, email } = req.body;
       if (!name || !phone) return res.status(400).json({ message: "Name and phone are required" });
-      const consultation = {
-        id: Date.now().toString(36).toUpperCase(),
-        name,
-        phone,
-        email: email || null,
-        createdAt: new Date().toISOString(),
-        status: "pending",
-      };
-      console.log("[Consultation] New booking:", consultation);
-      await storage.createNotification({
-        type: "client",
-        title: "New Consultation Booking",
-        message: `${name} (${phone}${email ? ", " + email : ""}) requested a free consultation call.`,
-        read: false,
+      console.log("[Consultation] New booking:", { name, phone, email });
+      const { client, steps } = await autoOnboardFromBooking(name, phone, email);
+      res.json({
+        success: true,
+        message: "Consultation booked & onboarding started!",
+        consultation: {
+          id: client.id,
+          name,
+          phone,
+          email: email || null,
+          clientId: client.id,
+          onboardingSteps: steps.length,
+          createdAt: client.createdAt,
+          status: "onboarding",
+        },
       });
-      res.json({ success: true, message: "Consultation booked successfully", consultation });
     } catch (err) { handleError(res, err); }
   });
 
@@ -2404,6 +2409,277 @@ Generate the COMPLETE document ready to print and mail. Include:
         generatedAt: new Date().toISOString(),
       });
     } catch (e) { handleError(res, e); }
+  });
+
+  // ─── ONBOARDING ENGINE ─────────────────────────────────────────────────────
+  app.get("/api/onboarding/:clientId", async (req, res) => {
+    try {
+      const steps = await db.select().from(onboardingSteps).where(eq(onboardingSteps.clientId, req.params.clientId));
+      if (steps.length === 0) {
+        const newSteps = await initializeOnboarding(req.params.clientId);
+        return res.json({ steps: newSteps, progress: 0 });
+      }
+      const completed = steps.filter(s => s.status === "completed").length;
+      res.json({ steps, progress: Math.round((completed / steps.length) * 100) });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/onboarding/:clientId/advance", async (req, res) => {
+    try {
+      const { step, data } = req.body;
+      const result = await advanceOnboarding(req.params.clientId, step, data);
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/onboarding/:clientId/auto-advance", async (req, res) => {
+    try {
+      const steps = await db.select().from(onboardingSteps).where(eq(onboardingSteps.clientId, req.params.clientId));
+      const inProgress = steps.find(s => s.status === "in_progress");
+      if (!inProgress) return res.json({ message: "No step in progress", complete: true });
+      const result = await advanceOnboarding(req.params.clientId, inProgress.step, req.body.data);
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/onboarding-steps", (_req, res) => {
+    res.json(ONBOARDING_STEPS);
+  });
+
+  // ─── PLAID BANKING INTEGRATION ──────────────────────────────────────────────
+  app.get("/api/plaid/status", (_req, res) => {
+    res.json({ configured: isPlaidConfigured() });
+  });
+
+  app.post("/api/plaid/create-link-token", async (req, res) => {
+    try {
+      const result = await createLinkToken(req.body.clientId || "system");
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/plaid/exchange-token", async (req, res) => {
+    try {
+      const { publicToken, clientId, institutionName } = req.body;
+      if (!publicToken || !clientId) return res.status(400).json({ message: "publicToken and clientId are required" });
+      const result = await exchangePublicToken(publicToken);
+      if ("error" in result) return res.status(400).json(result);
+      const accounts = await getAccounts(result.accessToken);
+      if ("error" in accounts) return res.status(400).json(accounts);
+
+      const saved = [];
+      for (const acct of accounts.accounts) {
+        const [ba] = await db.insert(bankAccounts).values({
+          clientId,
+          plaidItemId: result.itemId,
+          plaidAccessToken: result.accessToken,
+          institutionName: institutionName || "Unknown",
+          accountName: acct.name,
+          accountType: acct.type,
+          accountSubtype: acct.subtype || null,
+          mask: acct.mask,
+          balanceCurrent: acct.balanceCurrent,
+          balanceAvailable: acct.balanceAvailable,
+          balanceLimit: acct.balanceLimit,
+          lastSynced: new Date(),
+        }).returning();
+        saved.push(ba);
+      }
+      res.json({ accounts: saved });
+    } catch (e) { handleError(res, e); }
+  });
+
+  const stripPlaidSecrets = (accts: any[]) => accts.map(({ plaidAccessToken, plaidItemId, ...rest }) => rest);
+
+  app.get("/api/bank-accounts/:clientId", async (req, res) => {
+    try {
+      const accounts = await db.select().from(bankAccounts).where(eq(bankAccounts.clientId, req.params.clientId));
+      res.json(stripPlaidSecrets(accounts));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/bank-accounts", async (_req, res) => {
+    try {
+      const accounts = await db.select().from(bankAccounts);
+      res.json(stripPlaidSecrets(accounts));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/bank-accounts/:id/sync", async (req, res) => {
+    try {
+      const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
+      if (!acct || !acct.plaidAccessToken) return res.status(404).json({ message: "Account not found or no Plaid token" });
+      const accounts = await getAccounts(acct.plaidAccessToken);
+      if ("error" in accounts) return res.status(400).json(accounts);
+      const match = accounts.accounts.find((a: any) => a.mask === acct.mask);
+      if (match) {
+        await db.update(bankAccounts).set({
+          balanceCurrent: match.balanceCurrent,
+          balanceAvailable: match.balanceAvailable,
+          balanceLimit: match.balanceLimit,
+          lastSynced: new Date(),
+        }).where(eq(bankAccounts.id, req.params.id));
+      }
+      res.json({ synced: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/bank-accounts/:id/transactions", async (req, res) => {
+    try {
+      const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
+      if (!acct?.plaidAccessToken) return res.status(404).json({ message: "Account not found" });
+      const end = new Date().toISOString().split("T")[0];
+      const start = new Date(Date.now() - 90 * 86400000).toISOString().split("T")[0];
+      const result = await getTransactions(acct.plaidAccessToken, start, end);
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/bank-accounts/:id/liabilities", async (req, res) => {
+    try {
+      const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
+      if (!acct?.plaidAccessToken) return res.status(404).json({ message: "Account not found" });
+      const result = await getLiabilities(acct.plaidAccessToken);
+      res.json(result);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── CRYPTO WALLETS ─────────────────────────────────────────────────────────
+  app.get("/api/crypto-wallets", async (_req, res) => {
+    try {
+      const wallets = await db.select().from(cryptoWallets);
+      res.json(wallets);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/crypto-wallets/:clientId", async (req, res) => {
+    try {
+      const wallets = await db.select().from(cryptoWallets).where(eq(cryptoWallets.clientId, req.params.clientId));
+      res.json(wallets);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/crypto-wallets", async (req, res) => {
+    try {
+      const { clientId, walletAddress, walletType, chainId, label } = req.body;
+      if (!walletAddress) return res.status(400).json({ message: "Wallet address required" });
+      const [wallet] = await db.insert(cryptoWallets).values({
+        clientId: clientId || null,
+        walletAddress,
+        walletType: walletType || "metamask",
+        chainId: chainId || 1,
+        label: label || null,
+      }).returning();
+      res.json(wallet);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/crypto-wallets/:id", async (req, res) => {
+    try {
+      await db.delete(cryptoWallets).where(eq(cryptoWallets.id, req.params.id));
+      res.json({ deleted: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── LOAN APPLICATIONS / LENDING ────────────────────────────────────────────
+  app.get("/api/loans", async (_req, res) => {
+    try {
+      const loans = await db.select().from(loanApplications);
+      res.json(loans);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/api/loans/:clientId", async (req, res) => {
+    try {
+      const loans = await db.select().from(loanApplications).where(eq(loanApplications.clientId, req.params.clientId));
+      res.json(loans);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/loans", async (req, res) => {
+    try {
+      const { clientId, loanType, amount, termMonths, lender } = req.body;
+      if (!clientId || !loanType || !amount) return res.status(400).json({ message: "clientId, loanType, amount required" });
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      let aiRecommendation = null;
+      const avgScore = Math.round(((client.equifaxScore || 0) + (client.experianScore || 0) + (client.transunionScore || 0)) / 3);
+      if (avgScore > 0) {
+        const qualified = avgScore >= 620;
+        const rateEstimate = avgScore >= 740 ? "3.5-5%" : avgScore >= 680 ? "5-8%" : avgScore >= 620 ? "8-15%" : "15-25%+";
+        aiRecommendation = JSON.stringify({
+          qualified,
+          avgScore,
+          rateEstimate,
+          recommendation: qualified
+            ? `Client qualifies. Avg score ${avgScore}. Estimated rate: ${rateEstimate}. ${loanType === "auto" ? "Good for auto financing." : loanType === "mortgage" ? "FHA minimum met." : "Consider secured options."}`
+            : `Score too low (${avgScore}). Recommend 60-90 days of credit repair before applying. Target 620+ for conventional lending.`,
+        });
+      }
+
+      const [loan] = await db.insert(loanApplications).values({
+        clientId,
+        loanType,
+        amount,
+        termMonths: termMonths || null,
+        lender: lender || null,
+        status: "draft",
+        prequalified: avgScore >= 620,
+        aiRecommendation,
+      }).returning();
+      res.json(loan);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.patch("/api/loans/:id", async (req, res) => {
+    try {
+      const [updated] = await db.update(loanApplications).set(req.body).where(eq(loanApplications.id, req.params.id)).returning();
+      res.json(updated);
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── UI CUSTOMIZATION ──────────────────────────────────────────────────────
+  app.get("/api/ui-customization", async (_req, res) => {
+    try {
+      const rows = await db.select().from(uiCustomization);
+      const config: Record<string, string> = {};
+      rows.forEach(r => { config[r.key] = r.value; });
+      res.json(config);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/ui-customization", async (req, res) => {
+    try {
+      const entries = Object.entries(req.body) as [string, string][];
+      for (const [key, value] of entries) {
+        const existing = await db.select().from(uiCustomization).where(eq(uiCustomization.key, key));
+        if (existing.length > 0) {
+          await db.update(uiCustomization).set({ value, updatedAt: new Date() }).where(eq(uiCustomization.key, key));
+        } else {
+          await db.insert(uiCustomization).values({ key, value });
+        }
+      }
+      res.json({ saved: true });
+    } catch (e) { handleError(res, e); }
+  });
+
+  // ─── LENDER DIRECTORY ───────────────────────────────────────────────────────
+  app.get("/api/lenders", (_req, res) => {
+    res.json([
+      { id: "1", name: "LendingClub", types: ["personal", "debt_consolidation"], minScore: 600, maxAmount: 40000, apr: "8.98-35.99%", term: "24-60 months", features: ["No prepayment penalty", "Fixed rates", "Soft pull pre-qualify"] },
+      { id: "2", name: "SoFi", types: ["personal", "student_refi", "mortgage"], minScore: 680, maxAmount: 100000, apr: "8.99-25.81%", term: "24-84 months", features: ["Unemployment protection", "No fees", "Member benefits"] },
+      { id: "3", name: "Upstart", types: ["personal"], minScore: 300, maxAmount: 50000, apr: "6.4-35.99%", term: "36-60 months", features: ["AI underwriting", "Considers education", "Fast funding"] },
+      { id: "4", name: "Avant", types: ["personal"], minScore: 580, maxAmount: 35000, apr: "9.95-35.99%", term: "24-60 months", features: ["Bad credit OK", "Next-day funding", "Flexible terms"] },
+      { id: "5", name: "Prosper", types: ["personal", "debt_consolidation"], minScore: 640, maxAmount: 50000, apr: "6.99-35.99%", term: "24-60 months", features: ["Peer-to-peer", "Fixed rates", "Joint applications"] },
+      { id: "6", name: "Marcus by Goldman Sachs", types: ["personal", "debt_consolidation"], minScore: 660, maxAmount: 40000, apr: "6.99-24.99%", term: "36-72 months", features: ["No fees at all", "On-time payment reward", "Flexible payments"] },
+      { id: "7", name: "Capital One Auto", types: ["auto"], minScore: 500, maxAmount: 75000, apr: "4.49-24.99%", term: "36-72 months", features: ["Pre-qualify online", "Dealer network", "Refinance options"] },
+      { id: "8", name: "Rocket Mortgage", types: ["mortgage", "refinance"], minScore: 580, maxAmount: 1000000, apr: "Current market", term: "15-30 years", features: ["100% online", "VA/FHA/Conv", "Fast approval"] },
+      { id: "9", name: "Self Financial", types: ["credit_builder"], minScore: 0, maxAmount: 3600, apr: "N/A (builder)", term: "12-24 months", features: ["No credit check", "Builds credit", "Savings component"] },
+      { id: "10", name: "Chime Credit Builder", types: ["credit_builder", "secured_card"], minScore: 0, maxAmount: 0, apr: "N/A", term: "Ongoing", features: ["No annual fee", "No credit check", "Automatic reporting"] },
+      { id: "11", name: "OpenSky Secured Visa", types: ["secured_card"], minScore: 0, maxAmount: 3000, apr: "22.64%", term: "Ongoing", features: ["No credit check", "$200 minimum deposit", "Reports to all 3 bureaus"] },
+      { id: "12", name: "Kikoff", types: ["credit_builder"], minScore: 0, maxAmount: 750, apr: "N/A", term: "Ongoing", features: ["$5/mo revolving line", "No hard pull", "Reports monthly"] },
+    ]);
   });
 
   seedDefaultRules().catch(() => {});

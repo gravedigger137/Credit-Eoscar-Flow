@@ -99,6 +99,13 @@ export default function LoginPage() {
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [regForm, setRegForm] = useState({ username: "", password: "", confirmPassword: "", fullName: "", email: "" });
 
+  const { data: providers } = useQuery<any>({
+    queryKey: ["/api/auth/providers"],
+    retry: false,
+    staleTime: 60000,
+    refetchInterval: false,
+  });
+
   useEffect(() => {
     if (user) setLocation("/dashboard");
   }, [user, setLocation]);
@@ -157,13 +164,6 @@ export default function LoginPage() {
       </div>
     );
   }
-
-  const { data: providers } = useQuery<any>({
-    queryKey: ["/api/auth/providers"],
-    retry: false,
-    staleTime: 60000,
-    refetchInterval: false,
-  });
 
   const socialProviders = [
     { key: "google", name: "Google", icon: GoogleIcon, color: "hover:bg-white/10", url: "/api/auth/google" },

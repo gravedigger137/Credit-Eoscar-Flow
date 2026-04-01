@@ -24,7 +24,7 @@ import { analyzeCreditFactors, predictDefault, type CreditFactorInput, type Defa
 import {
   getSalesReport, getClientFinancialSummary, getRevenueForecasting,
   createCreditSale, getCreditSales, recordCreditSalePayment,
-  saveCreditFactorSnapshot, getCreditFactorHistory
+  saveCreditFactorSnapshot, getCreditFactorHistory, ensureCreditSalesTable
 } from "./financial-reports";
 import {
   detectScoreChanges, createAlertsAsNotifications, getClientScoreHistory,
@@ -106,6 +106,8 @@ function getRouteParam(param: string | string[] | undefined): string {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+
+  await ensureCreditSalesTable();
 
   // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) + AUTO-ONBOARDING ──────────────
   app.post("/api/book-consultation", async (req, res) => {

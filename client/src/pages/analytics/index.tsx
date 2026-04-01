@@ -353,14 +353,14 @@ export default function Analytics() {
             </Select>
           </div>
 
-          {salesReport && (
+          {salesReport && salesReport.totalRevenue !== undefined && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: "Total Revenue", value: `$${(salesReport.totalRevenue / 100).toLocaleString()}`, icon: DollarSign, color: "text-green-500" },
-                  { label: "Total Sales", value: salesReport.totalSales, icon: Receipt, color: "text-blue-500" },
-                  { label: "Average Ticket", value: `$${(salesReport.averageTicket / 100).toLocaleString()}`, icon: CreditCard, color: "text-purple-500" },
-                  { label: "Unpaid", value: `$${(salesReport.unpaidAmount / 100).toLocaleString()}`, icon: AlertTriangle, color: salesReport.unpaidAmount > 0 ? "text-red-500" : "text-green-500" },
+                  { label: "Total Revenue", value: `$${((salesReport.totalRevenue || 0) / 100).toLocaleString()}`, icon: DollarSign, color: "text-green-500" },
+                  { label: "Total Sales", value: salesReport.totalSales || 0, icon: Receipt, color: "text-blue-500" },
+                  { label: "Average Ticket", value: `$${((salesReport.averageTicket || 0) / 100).toLocaleString()}`, icon: CreditCard, color: "text-purple-500" },
+                  { label: "Unpaid", value: `$${((salesReport.unpaidAmount || 0) / 100).toLocaleString()}`, icon: AlertTriangle, color: (salesReport.unpaidAmount || 0) > 0 ? "text-red-500" : "text-green-500" },
                 ].map(stat => (
                   <Card key={stat.label}>
                     <CardContent className="pt-4">
@@ -380,7 +380,7 @@ export default function Analytics() {
                 <Card>
                   <CardHeader><CardTitle className="text-base">Revenue by Type</CardTitle></CardHeader>
                   <CardContent>
-                    {salesReport.topServices.length > 0 ? (
+                    {(salesReport.topServices || []).length > 0 ? (
                       <div className="space-y-3">
                         {salesReport.topServices.map((s: any, i: number) => (
                           <div key={i} className="flex items-center justify-between">
@@ -403,19 +403,19 @@ export default function Analytics() {
                     <div className="space-y-4">
                       <div className="flex justify-between items-center">
                         <span className="text-sm">Cash/Card Sales</span>
-                        <Badge>{salesReport.cashSales}</Badge>
+                        <Badge>{salesReport.cashSales || 0}</Badge>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm">Credit Sales (Deferred)</span>
-                        <Badge variant="secondary">{salesReport.creditSales}</Badge>
+                        <Badge variant="secondary">{salesReport.creditSales || 0}</Badge>
                       </div>
                       <div className="flex justify-between items-center pt-3 border-t">
                         <span className="text-sm font-medium">Paid Amount</span>
-                        <span className="font-bold text-green-500">${(salesReport.paidAmount / 100).toLocaleString()}</span>
+                        <span className="font-bold text-green-500">${((salesReport.paidAmount || 0) / 100).toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-medium">Outstanding</span>
-                        <span className="font-bold text-red-500">${(salesReport.unpaidAmount / 100).toLocaleString()}</span>
+                        <span className="font-bold text-red-500">${((salesReport.unpaidAmount || 0) / 100).toLocaleString()}</span>
                       </div>
                     </div>
                   </CardContent>

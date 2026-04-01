@@ -7,6 +7,24 @@
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
+export async function ensureCreditSalesTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS credit_sales (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id VARCHAR NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      amount INTEGER NOT NULL DEFAULT 0,
+      credit_terms TEXT,
+      due_date TIMESTAMPTZ,
+      notes TEXT,
+      paid_amount INTEGER NOT NULL DEFAULT 0,
+      payment_status TEXT NOT NULL DEFAULT 'unpaid',
+      paid_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
 export interface SalesReport {
   period: string;
   totalRevenue: number;

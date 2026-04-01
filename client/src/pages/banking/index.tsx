@@ -336,10 +336,10 @@ export default function Banking() {
                 </div>
                 <div>
                   <Label>Preferred Lender (optional)</Label>
-                  <Select value={loanForm.lender} onValueChange={v => setLoanForm(f => ({ ...f, lender: v }))}>
+                  <Select value={loanForm.lender || "any"} onValueChange={v => setLoanForm(f => ({ ...f, lender: v === "any" ? "" : v }))}>
                     <SelectTrigger data-testid="select-loan-lender"><SelectValue placeholder="Any" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Any Lender</SelectItem>
+                      <SelectItem value="any">Any Lender</SelectItem>
                       {lenders.map((l: any) => <SelectItem key={l.id} value={l.name}>{l.name}</SelectItem>)}
                     </SelectContent>
                   </Select>

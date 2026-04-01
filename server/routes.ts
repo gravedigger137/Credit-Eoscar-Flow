@@ -2491,6 +2491,35 @@ Generate the COMPLETE document ready to print and mail. Include:
 
   const stripPlaidSecrets = (accts: any[]) => accts.map(({ plaidAccessToken, plaidItemId, ...rest }) => rest);
 
+  app.post("/api/bank-accounts", async (req, res) => {
+    try {
+      const { clientId, institutionName, accountName, accountType, accountSubtype, mask, balanceCurrent, balanceAvailable, balanceLimit } = req.body;
+      if (!clientId || !institutionName || !accountName || !accountType) {
+        return res.status(400).json({ message: "clientId, institutionName, accountName, and accountType are required" });
+      }
+      const [acct] = await db.insert(bankAccounts).values({
+        clientId,
+        institutionName,
+        accountName,
+        accountType,
+        accountSubtype: accountSubtype || null,
+        mask: mask || null,
+        balanceCurrent: balanceCurrent ?? null,
+        balanceAvailable: balanceAvailable ?? null,
+        balanceLimit: balanceLimit ?? null,
+        lastSynced: new Date(),
+      }).returning();
+      res.json(acct);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.delete("/api/bank-accounts/:id", async (req, res) => {
+    try {
+      await db.delete(bankAccounts).where(eq(bankAccounts.id, req.params.id));
+      res.json({ deleted: true });
+    } catch (e) { handleError(res, e); }
+  });
+
   app.get("/api/bank-accounts/:clientId", async (req, res) => {
     try {
       const accounts = await db.select().from(bankAccounts).where(eq(bankAccounts.clientId, req.params.clientId));

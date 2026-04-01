@@ -5,13 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Save, Key, Building, Database, Bot, ShieldCheck, Lock, Bell, CreditCard, Crown, Zap, Users, FileText, BarChart3, Shield } from "lucide-react";
+import { Save, Key, Building, Database, Bot, ShieldCheck, Lock, Bell, CreditCard, Crown, Zap, Users, FileText, BarChart3, Shield, Play, Clock, CheckCircle2, XCircle, RefreshCw, Settings2, Activity, Code, Scale, Wrench, GraduationCap, Trophy, Hammer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const ADMIN_OVERRIDES = [
   {
@@ -85,6 +87,269 @@ const ADMIN_OVERRIDES = [
     category: "automation",
   },
 ];
+
+const BOT_CONFIG = [
+  { type: "bot_system_health", icon: Activity, color: "text-green-500", bg: "bg-green-500/10", border: "border-green-500/30", category: "operations" },
+  { type: "bot_banking_sync", icon: Building, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/30", category: "financial" },
+  { type: "bot_document_worker", icon: FileText, color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30", category: "operations" },
+  { type: "bot_legal_compliance", icon: Scale, color: "text-red-500", bg: "bg-red-500/10", border: "border-red-500/30", category: "legal" },
+  { type: "bot_data_furnisher", icon: Database, color: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/30", category: "credit" },
+  { type: "bot_lender_outreach", icon: Users, color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30", category: "financial" },
+  { type: "bot_owner_briefing", icon: BarChart3, color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/30", category: "operations" },
+  { type: "bot_security_monitor", icon: ShieldCheck, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", category: "operations" },
+  { type: "bot_accounting", icon: CreditCard, color: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/30", category: "financial" },
+  { type: "bot_client_comms", icon: Bell, color: "text-pink-500", bg: "bg-pink-500/10", border: "border-pink-500/30", category: "operations" },
+  { type: "bot_coder", icon: Code, color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/30", category: "development" },
+  { type: "bot_trust_law", icon: Scale, color: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/30", category: "legal" },
+  { type: "bot_developer", icon: Wrench, color: "text-sky-500", bg: "bg-sky-500/10", border: "border-sky-500/30", category: "development" },
+  { type: "bot_trainer", icon: GraduationCap, color: "text-teal-500", bg: "bg-teal-500/10", border: "border-teal-500/30", category: "operations" },
+  { type: "bot_credit_specialist", icon: Trophy, color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/30", category: "credit" },
+  { type: "bot_maintenance", icon: Hammer, color: "text-stone-500", bg: "bg-stone-500/10", border: "border-stone-500/30", category: "development" },
+];
+
+function BotCommandCenter() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [filter, setFilter] = useState("all");
+  const [expandedBot, setExpandedBot] = useState<string | null>(null);
+
+  const { data: rules = [] } = useQuery<any[]>({ queryKey: ["/api/automation/rules"] });
+  const { data: runs = [] } = useQuery<any[]>({ queryKey: ["/api/automation/runs"] });
+  const { data: stats } = useQuery<any>({ queryKey: ["/api/automation/stats"] });
+
+  const botRules = rules.filter((r: any) => r.workflowType?.startsWith("bot_"));
+  const activeBots = botRules.filter((r: any) => r.enabled).length;
+
+  const toggleBot = async (ruleId: string) => {
+    try {
+      await apiRequest("PATCH", `/api/automation/rules/${ruleId}/toggle`);
+      qc.invalidateQueries({ queryKey: ["/api/automation/rules"] });
+      toast({ title: "Bot status updated!" });
+    } catch { toast({ title: "Failed to toggle bot", variant: "destructive" }); }
+  };
+
+  const runBot = async (ruleId: string, name: string) => {
+    try {
+      toast({ title: `Running ${name}...` });
+      await apiRequest("POST", `/api/automation/rules/${ruleId}/execute`);
+      qc.invalidateQueries({ queryKey: ["/api/automation/runs"] });
+      qc.invalidateQueries({ queryKey: ["/api/automation/rules"] });
+      toast({ title: `${name} completed!` });
+    } catch { toast({ title: `${name} execution failed`, variant: "destructive" }); }
+  };
+
+  const updateFrequency = async (ruleId: string, freq: string) => {
+    try {
+      await apiRequest("PATCH", `/api/automation/rules/${ruleId}`, { triggerConfig: { frequency: freq } });
+      qc.invalidateQueries({ queryKey: ["/api/automation/rules"] });
+      toast({ title: `Schedule updated to ${freq}` });
+    } catch { toast({ title: "Failed to update schedule", variant: "destructive" }); }
+  };
+
+  const filteredBots = botRules.filter((r: any) => {
+    if (filter === "all") return true;
+    const cfg = BOT_CONFIG.find(b => b.type === r.workflowType);
+    return cfg?.category === filter;
+  });
+
+  const getLastRun = (ruleId: string) => {
+    return runs.find((r: any) => r.ruleId === ruleId);
+  };
+
+  const formatTime = (dateStr: string) => {
+    if (!dateStr) return "Never";
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    if (diff < 60000) return "Just now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return `${Math.floor(diff / 86400000)}d ago`;
+  };
+
+  return (
+    <>
+      <Card className="glass-panel border-l-4 border-l-primary">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Bot className="w-6 h-6 text-primary" /> AI Bot Command Center
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Configure, schedule, and manage all {botRules.length} AI worker bots. Each bot handles a specialized task — set what they do, when they run, and monitor their activity.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className={activeBots > 0 ? "border-primary text-primary bg-primary/10" : ""}>
+                {activeBots}/{botRules.length} Active
+              </Badge>
+              <Badge variant="outline" className="border-emerald-500 text-emerald-500">
+                <Activity className="w-3 h-3 mr-1" /> {stats?.last30Days?.totalRuns || 0} runs (30d)
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2 mb-6">
+            {[
+              { val: "all", label: "All Bots" },
+              { val: "operations", label: "Operations" },
+              { val: "financial", label: "Financial" },
+              { val: "legal", label: "Legal" },
+              { val: "credit", label: "Credit" },
+              { val: "development", label: "Development" },
+            ].map(f => (
+              <Button key={f.val} size="sm" variant={filter === f.val ? "default" : "outline"} onClick={() => setFilter(f.val)} data-testid={`filter-${f.val}`}>
+                {f.label}
+              </Button>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {filteredBots.map((rule: any) => {
+              const cfg = BOT_CONFIG.find(b => b.type === rule.workflowType);
+              const Icon = cfg?.icon || Bot;
+              const lastRun = getLastRun(rule.id);
+              const isExpanded = expandedBot === rule.id;
+              const freq = rule.triggerConfig?.frequency || "daily";
+
+              return (
+                <div key={rule.id} className={`rounded-xl border transition-all ${rule.enabled ? `${cfg?.border || "border-primary/30"} ${cfg?.bg || "bg-primary/5"}` : "border-border bg-muted/30 opacity-70"}`}>
+                  <div className="flex items-center justify-between p-4 cursor-pointer" onClick={() => setExpandedBot(isExpanded ? null : rule.id)} data-testid={`bot-card-${rule.workflowType}`}>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={`p-2.5 rounded-lg ${rule.enabled ? cfg?.bg : "bg-muted"}`}>
+                        <Icon className={`w-5 h-5 ${rule.enabled ? cfg?.color : "text-muted-foreground"}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm truncate">{rule.name}</span>
+                          <Badge variant="secondary" className="text-[10px] capitalize shrink-0">{freq}</Badge>
+                          {lastRun && (
+                            <Badge variant={lastRun.status === "completed" ? "outline" : "destructive"} className="text-[10px] shrink-0">
+                              {lastRun.status === "completed" ? <CheckCircle2 className="w-3 h-3 mr-0.5" /> : <XCircle className="w-3 h-3 mr-0.5" />}
+                              {formatTime(lastRun.startedAt)}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{rule.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-3 shrink-0">
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); runBot(rule.id, rule.name); }} data-testid={`run-${rule.workflowType}`}>
+                        <Play className="w-4 h-4" />
+                      </Button>
+                      <Switch checked={rule.enabled} onCheckedChange={() => toggleBot(rule.id)} data-testid={`toggle-${rule.workflowType}`} onClick={(e) => e.stopPropagation()} />
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="border-t px-4 pb-4 pt-3 space-y-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Schedule (When)</Label>
+                          <Select value={freq} onValueChange={(v) => updateFrequency(rule.id, v)}>
+                            <SelectTrigger data-testid={`freq-${rule.workflowType}`}><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="hourly">Every Hour</SelectItem>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Run Count</Label>
+                          <div className="flex items-center gap-2 h-10">
+                            <RefreshCw className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm font-mono">{rule.runCount || 0} total runs</span>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Last Run</Label>
+                          <div className="flex items-center gap-2 h-10">
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm">{rule.lastRunAt ? formatTime(rule.lastRunAt) : "Never run"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What This Bot Does</Label>
+                        <div className="p-3 rounded-lg bg-background/80 border text-sm">{rule.description}</div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Action Pipeline</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {(rule.actions || []).map((a: any, i: number) => (
+                            <Badge key={i} variant="outline" className="font-mono text-xs capitalize">
+                              {i + 1}. {a.type.replace(/_/g, " ")}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      {lastRun && (
+                        <div className="space-y-2">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Last Run Results</Label>
+                          <div className="p-3 rounded-lg bg-background/80 border">
+                            <div className="flex gap-4 text-sm">
+                              <span>Processed: <strong>{lastRun.itemsProcessed}</strong></span>
+                              <span className="text-emerald-500">Succeeded: <strong>{lastRun.itemsSucceeded}</strong></span>
+                              <span className="text-red-500">Failed: <strong>{lastRun.itemsFailed}</strong></span>
+                            </div>
+                            {lastRun.results && Object.keys(lastRun.results).length > 0 && (
+                              <pre className="mt-2 text-xs font-mono text-muted-foreground overflow-auto max-h-32">{JSON.stringify(lastRun.results, null, 2)}</pre>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-2">
+                        <Button size="sm" onClick={() => runBot(rule.id, rule.name)} data-testid={`run-expanded-${rule.workflowType}`}>
+                          <Play className="w-3.5 h-3.5 mr-1.5" /> Run Now
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => toggleBot(rule.id)}>
+                          {rule.enabled ? <><XCircle className="w-3.5 h-3.5 mr-1.5" /> Disable</> : <><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Enable</>}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredBots.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Bot className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No bots found for this category. Reseed automation rules to add them.</p>
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="border-t border-border/50 px-6 py-4 flex justify-between items-center">
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Settings2 className="w-3.5 h-3.5" />
+            Bots run automatically on schedule. Click any bot to expand configuration.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => {
+              botRules.forEach((r: any) => { if (!r.enabled) toggleBot(r.id); });
+            }} data-testid="button-enable-all-bots">
+              <Zap className="w-3.5 h-3.5 mr-1.5" /> Enable All
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              botRules.forEach((r: any) => runBot(r.id, r.name));
+            }} data-testid="button-run-all-bots">
+              <Play className="w-3.5 h-3.5 mr-1.5" /> Run All Now
+            </Button>
+          </div>
+        </CardFooter>
+      </Card>
+    </>
+  );
+}
 
 export default function Settings() {
   const { toast } = useToast();
@@ -482,30 +747,8 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="ai" className="mt-6">
-            <Card className="glass-panel border-l-4 border-l-primary">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bot className="w-5 h-5 text-primary" /> AI Dispute Automation Engine</CardTitle>
-                <CardDescription>Configure how the AI automatically analyzes reports and challenges negative items on your behalf.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  { label: "Auto-Import & Analyze Reports", desc: "AI pulls credit reports monthly and flags all negative items automatically." },
-                  { label: "Auto-Draft Dispute Letters", desc: "AI generates FCRA/FDCPA-compliant dispute letters for each identified item." },
-                  { label: "Auto-Submit to e-OSCAR", desc: "Batches and pushes approved disputes directly to bureaus with no manual action needed." },
-                  { label: "Smart Prioritization", desc: "AI ranks disputes by impact score — targeting the highest-damage items first." },
-                  { label: "Client Progress Alerts", desc: "Automatically notify clients when items are deleted or scores improve." },
-                ].map((toggle, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border">
-                    <div><Label className="text-base">{toggle.label}</Label><p className="text-sm text-muted-foreground">{toggle.desc}</p></div>
-                    <Switch defaultChecked />
-                  </div>
-                ))}
-              </CardContent>
-              <CardFooter className="border-t border-border/50 px-6 py-4">
-                <Button><Save className="w-4 h-4 mr-2" />Save AI Settings</Button>
-              </CardFooter>
-            </Card>
+          <TabsContent value="ai" className="mt-6 space-y-6">
+            <BotCommandCenter />
           </TabsContent>
 
           <TabsContent value="security" className="mt-6">

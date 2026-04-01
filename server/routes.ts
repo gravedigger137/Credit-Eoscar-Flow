@@ -1904,6 +1904,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
+  app.patch("/api/automation/rules/:id", async (req, res) => {
+    try {
+      const rule = await updateAutomationRule(req.params.id, req.body);
+      res.json(rule);
+    } catch (e) { handleError(res, e); }
+  });
+
   app.delete("/api/automation/rules/:id", async (req, res) => {
     try {
       await deleteAutomationRule(req.params.id);

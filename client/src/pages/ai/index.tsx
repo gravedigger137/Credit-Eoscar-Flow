@@ -17,7 +17,14 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const BUREAUS = ["Equifax", "Experian", "TransUnion", "Innovis", "ChexSystems", "LexisNexis"];
+const BUREAUS = [
+  { value: "equifax", label: "Equifax" },
+  { value: "experian", label: "Experian" },
+  { value: "transunion", label: "TransUnion" },
+  { value: "innovis", label: "Innovis" },
+  { value: "chexsystems", label: "ChexSystems" },
+  { value: "lexisnexis", label: "LexisNexis" },
+];
 const DISPUTE_TYPES = [
   "Collection Account", "Late Payment", "Charge-off", "Bankruptcy",
   "Inquiry (Hard)", "Identity Theft / Fraud", "Incorrect Balance",
@@ -117,7 +124,7 @@ export default function AIPage() {
 
   // ── Dispute Letter state ──
   const [letterForm, setLetterForm] = useState({
-    clientId: "", bureau: "Equifax", accountName: "", accountNumber: "",
+    clientId: "", bureau: "equifax", accountName: "", accountNumber: "",
     type: "Collection Account", reason: "Not mine / Never had this account",
   });
   const [generatedLetter, setGeneratedLetter] = useState("");
@@ -296,7 +303,7 @@ export default function AIPage() {
                     <Select value={letterForm.bureau} onValueChange={v => setLetterForm(f => ({ ...f, bureau: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {BUREAUS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        {BUREAUS.map(b => <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>

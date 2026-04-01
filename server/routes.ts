@@ -1761,6 +1761,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
+  app.get("/api/trust-accounts/chart-of-accounts", (_req, res) => {
+    res.json({
+      assets: [
+        { code: "1000", name: "Client Trust Account", type: "asset", subtype: "current", description: "Funds held in trust for clients" },
+        { code: "1100", name: "Operating Cash", type: "asset", subtype: "current", description: "Company operating funds" },
+        { code: "1200", name: "Accounts Receivable", type: "asset", subtype: "current", description: "Outstanding client invoices" },
+        { code: "1500", name: "Prepaid Bureau Fees", type: "asset", subtype: "current", description: "Prepaid bureau API subscription fees" },
+      ],
+      liabilities: [
+        { code: "2000", name: "Client Trust Liability", type: "liability", subtype: "current", description: "Obligation to return client trust funds" },
+        { code: "2100", name: "Accounts Payable", type: "liability", subtype: "current", description: "Outstanding bills to vendors/partners" },
+        { code: "2200", name: "Unearned Revenue", type: "liability", subtype: "current", description: "Prepaid service fees not yet earned" },
+        { code: "2300", name: "Partner Payouts Payable", type: "liability", subtype: "current", description: "Owed tradeline partner payouts" },
+      ],
+      revenue: [
+        { code: "4000", name: "Credit Repair Service Fees", type: "revenue", description: "Monthly credit repair subscription fees" },
+        { code: "4100", name: "Tradeline Placement Revenue", type: "revenue", description: "Revenue from AU tradeline placements" },
+        { code: "4200", name: "Credit Builder Revenue", type: "revenue", description: "Revenue from credit builder product enrollments" },
+        { code: "4300", name: "Consultation Fees", type: "revenue", description: "One-time consultation and setup fees" },
+      ],
+      expenses: [
+        { code: "5000", name: "Bureau API Costs", type: "expense", description: "Equifax/Experian/TransUnion API usage fees" },
+        { code: "5100", name: "Partner Payouts", type: "expense", description: "Payments to AU tradeline cardholders" },
+        { code: "5200", name: "Software & Tools", type: "expense", description: "CRM, e-OSCAR, and other platform costs" },
+        { code: "5300", name: "AI/GPT Usage", type: "expense", description: "OpenAI API costs for dispute letters and analysis" },
+        { code: "5400", name: "Marketing", type: "expense", description: "Advertising and client acquisition costs" },
+        { code: "5500", name: "Insurance & Compliance", type: "expense", description: "E&O insurance, bond, and compliance costs" },
+      ],
+    });
+  });
+
   app.get("/api/trust-accounts/:clientId", async (req, res) => {
     try {
       await ensureLedgerTables();
@@ -2366,37 +2397,6 @@ Generate the COMPLETE document ready to print and mail. Include:
       recordUsageEvent({ eventType: "invoice_generated", metadata: { clientId, invoiceNumber }, quantity: 1 }).catch(() => {});
       res.json(invoiceData);
     } catch (e) { handleError(res, e); }
-  });
-
-  app.get("/api/trust-accounts/chart-of-accounts", (_req, res) => {
-    res.json({
-      assets: [
-        { code: "1000", name: "Client Trust Account", type: "asset", subtype: "current", description: "Funds held in trust for clients" },
-        { code: "1100", name: "Operating Cash", type: "asset", subtype: "current", description: "Company operating funds" },
-        { code: "1200", name: "Accounts Receivable", type: "asset", subtype: "current", description: "Outstanding client invoices" },
-        { code: "1500", name: "Prepaid Bureau Fees", type: "asset", subtype: "current", description: "Prepaid bureau API subscription fees" },
-      ],
-      liabilities: [
-        { code: "2000", name: "Client Trust Liability", type: "liability", subtype: "current", description: "Obligation to return client trust funds" },
-        { code: "2100", name: "Accounts Payable", type: "liability", subtype: "current", description: "Outstanding bills to vendors/partners" },
-        { code: "2200", name: "Unearned Revenue", type: "liability", subtype: "current", description: "Prepaid service fees not yet earned" },
-        { code: "2300", name: "Partner Payouts Payable", type: "liability", subtype: "current", description: "Owed tradeline partner payouts" },
-      ],
-      revenue: [
-        { code: "4000", name: "Credit Repair Service Fees", type: "revenue", description: "Monthly credit repair subscription fees" },
-        { code: "4100", name: "Tradeline Placement Revenue", type: "revenue", description: "Revenue from AU tradeline placements" },
-        { code: "4200", name: "Credit Builder Revenue", type: "revenue", description: "Revenue from credit builder product enrollments" },
-        { code: "4300", name: "Consultation Fees", type: "revenue", description: "One-time consultation and setup fees" },
-      ],
-      expenses: [
-        { code: "5000", name: "Bureau API Costs", type: "expense", description: "Equifax/Experian/TransUnion API usage fees" },
-        { code: "5100", name: "Partner Payouts", type: "expense", description: "Payments to AU tradeline cardholders" },
-        { code: "5200", name: "Software & Tools", type: "expense", description: "CRM, e-OSCAR, and other platform costs" },
-        { code: "5300", name: "AI/GPT Usage", type: "expense", description: "OpenAI API costs for dispute letters and analysis" },
-        { code: "5400", name: "Marketing", type: "expense", description: "Advertising and client acquisition costs" },
-        { code: "5500", name: "Insurance & Compliance", type: "expense", description: "E&O insurance, bond, and compliance costs" },
-      ],
-    });
   });
 
   app.post("/api/trust-accounts/profit-loss", async (_req, res) => {

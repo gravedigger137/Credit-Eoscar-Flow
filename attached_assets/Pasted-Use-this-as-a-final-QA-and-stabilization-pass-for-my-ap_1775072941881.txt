@@ -1,0 +1,206 @@
+Use this as a final QA and stabilization pass for my app before publish.
+
+Important rules:
+- Do not add new features
+- Do not redesign the app unless needed to fix usability issues
+- Focus only on testing, fixing, stabilizing, and hiding broken or unfinished parts
+- Prioritize reliability over extra polish
+- If something is unfinished or unstable, hide it or disable it instead of trying to force it into the release
+- Do not publish automatically
+- Stop after fixes and give me a final readiness summary
+
+Your goal:
+Make the app stable enough to demo and publish confidently.
+
+Tasks:
+
+1) First impression
+Check that:
+- app name is visible
+- it is obvious what the app does
+- home screen looks clean
+- there is no placeholder text like "lorem ipsum" or "coming soon"
+- there are no test buttons or fake data showing
+
+2) Main user flow
+Identify the main purpose of the app and test the main user flow end to end.
+Check that:
+- user can start the flow easily
+- each step works
+- final result appears correctly
+- there are no confusing steps
+- there are no dead ends
+
+Run the main flow 3 times in a row.
+If it breaks even once, fix that before moving on.
+
+3) Login and account
+If the app has authentication, test:
+- sign up
+- log in
+- log out
+- password reset
+- wrong password message
+- duplicate email handling
+- session stays active when expected
+- session ends when expected
+
+If there is no login system, skip this section.
+
+4) Bots / AI features
+Test all bot and AI behavior.
+Check that:
+- bot triggers correctly
+- bot answers in the right place
+- bot does not freeze
+- bot does not repeat itself endlessly
+- bot handles bad input
+- bot handles empty input
+- bot gives usable output
+- bot failures show a message instead of breaking the app
+
+Also test:
+- very short input
+- very long input
+- nonsense input
+- user clicking twice fast
+
+5) Forms and inputs
+For every form, verify:
+- submit works
+- required fields are enforced
+- invalid input gives a clear message
+- saved data is actually saved
+- after refresh, saved data is still there
+
+6) Data behavior
+Test:
+- create
+- read
+- update
+- delete
+
+Make sure:
+- new data appears
+- edits actually update
+- deleted items disappear
+- data reloads correctly after refresh
+- wrong or old data does not show up
+
+7) Navigation
+Check that:
+- every menu item works
+- back buttons work
+- links go to the right place
+- there are no blank pages
+- no pages are stuck loading forever
+- there are no buttons that do nothing
+
+8) Error handling
+Try to break the app on purpose:
+- leave fields empty
+- enter invalid info
+- click buttons fast
+- refresh mid-process
+- simulate weak or unstable connection if possible
+
+Make sure:
+- app does not crash
+- there are no ugly raw error dumps
+- user sees helpful error messages
+
+9) Mobile and screen size
+If the app may be shown on phone, test:
+- homepage on phone
+- main workflow on phone
+- forms on phone
+- bot area on phone
+- buttons are easy to tap
+- text is readable
+- nothing overlaps or goes off screen
+
+Also verify laptop/desktop view.
+
+10) Speed and responsiveness
+Check that:
+- pages open in reasonable time
+- bot replies in reasonable time
+- saving does not feel broken
+- loading states appear when needed
+
+If something is slow, improve perceived reliability by adding:
+- loading message
+- spinner
+- processing text
+
+11) Presentation safety
+Before release, make sure:
+- fake or test accounts are not visible
+- junk records are removed
+- unfinished sections are hidden
+- unreliable features are turned off
+- no private keys or sensitive information are exposed
+- there is a clean demo account if needed
+
+12) Demo readiness
+Prepare the app so it can support a 2 to 5 minute demo that clearly shows:
+1. what the app is
+2. who it helps
+3. the problem it solves
+4. the main workflow
+5. the result
+
+Only optimize what supports a successful demo.
+
+13) Final go/no-go evaluation
+At the end, answer these:
+- Can a new person understand the app quickly?
+- Does the main workflow work every time?
+- Can I demo it confidently without hoping something works?
+
+Priority system:
+
+Fix now:
+- crashes
+- login problems
+- save/load problems
+- bot not responding
+- broken main workflow
+- blank screens
+- obvious error messages
+
+Fix later:
+- tiny design issues
+- wording changes
+- minor layout problems
+- extra settings
+- edge cases outside the demo
+
+Hide for now:
+- unfinished tools
+- unstable pages
+- experimental bot actions
+- future sections
+
+Track findings in this format:
+Page/Feature | Works? | Problem | Priority
+
+Example:
+Home | Yes | none | —
+Login | No | reset email not sending | Fix now
+Bot reply | Yes | slow first response | Fix later
+Settings | No | unfinished | Hide for now
+
+Final output required:
+When you are done, give me:
+1. what you fixed
+2. what still needs manual review
+3. what you hid or disabled
+4. any risks before publish
+5. whether the app is ready to demo
+6. whether the app is ready to publish
+
+Again:
+- do not add new features
+- do not publish automatically
+- stop after fixes and provide the final readiness summary

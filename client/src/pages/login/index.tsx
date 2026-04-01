@@ -293,44 +293,32 @@ export default function LoginPage() {
           )}
         </Card>
 
-        <div className="mt-6">
-          <div className="relative mb-5">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
+        {providers && socialProviders.some(sp => (providers as any)[sp.key]) && (
+          <div className="mt-6">
+            <div className="relative mb-5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/10" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="px-3 bg-[#030712] text-white/40">or continue with</span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-3 bg-[#030712] text-white/40">or continue with</span>
+
+            <div className="grid grid-cols-3 gap-3">
+              {socialProviders.filter(sp => (providers as any)[sp.key]).map((sp) => (
+                <a
+                  key={sp.key}
+                  href={sp.url}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-white/10 bg-white/[0.03] ${sp.color} transition-all duration-200 group`}
+                  data-testid={`button-social-${sp.key}`}
+                >
+                  <sp.icon className="w-5 h-5" />
+                  <span className="text-xs text-white/60 group-hover:text-white/90 hidden sm:inline">{sp.name}</span>
+                </a>
+              ))}
             </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {socialProviders.slice(0, 6).map((sp) => (
-              <a
-                key={sp.key}
-                href={sp.url}
-                className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-white/10 bg-white/[0.03] ${sp.color} transition-all duration-200 group`}
-                data-testid={`button-social-${sp.key}`}
-              >
-                <sp.icon className="w-5 h-5" />
-                <span className="text-xs text-white/60 group-hover:text-white/90 hidden sm:inline">{sp.name}</span>
-              </a>
-            ))}
-          </div>
-
-          <div className="flex justify-center gap-3">
-            {socialProviders.slice(6).map((sp) => (
-              <a
-                key={sp.key}
-                href={sp.url}
-                className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-white/10 bg-white/[0.03] ${sp.color} transition-all duration-200 group`}
-                data-testid={`button-social-${sp.key}`}
-              >
-                <sp.icon className="w-4 h-4" />
-                <span className="text-xs text-white/60 group-hover:text-white/90">{sp.name}</span>
-              </a>
-            ))}
-          </div>
-        </div>
+        )}
 
         <p className="text-center text-white/20 text-xs mt-6">
           256-bit encrypted · CROA compliant · SOC2 infrastructure

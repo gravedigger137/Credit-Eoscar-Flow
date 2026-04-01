@@ -49,7 +49,7 @@ authRouter.post("/api/auth/register", async (req: Request, res: Response) => {
     }
 
     const hashed = await bcrypt.hash(password, 12);
-    const role = isFirstUser ? "admin" : "staff";
+    const role = isFirstUser ? "admin" : "client";
     const user = await storage.createUser({ username, password: hashed, fullName, email, phone, role });
 
     if (isFirstUser) {

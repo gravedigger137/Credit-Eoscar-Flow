@@ -328,58 +328,156 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="integrations" className="mt-6 space-y-6">
-            <Card className="glass-panel">
+            {/* Plaid Banking */}
+            <Card className="glass-panel border-l-4 border-l-blue-500">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Database className="w-5 h-5 text-primary" /> e-OSCAR API</CardTitle>
-                <CardDescription>Automate dispute submissions directly to credit bureaus.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Building className="w-5 h-5 text-blue-500" /> Plaid Banking Integration</CardTitle>
+                <CardDescription>Connect client bank accounts for identity verification, income analysis, liability tracking, and automated ACH payments.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2"><Label>Company ID</Label><Input placeholder="CRP-98211" /></div>
-                <div className="space-y-2"><Label>API Key</Label><Input type="password" placeholder="••••••••••••••••" /></div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2"><Label>Plaid Client ID</Label><Input placeholder="Enter Plaid Client ID" data-testid="input-plaid-client-id" onChange={e => (window as any).__plaidClientId = e.target.value} /></div>
+                  <div className="space-y-2"><Label>Plaid Secret</Label><Input type="password" placeholder="Enter Plaid Secret" data-testid="input-plaid-secret" onChange={e => (window as any).__plaidSecret = e.target.value} /></div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Environment</Label>
+                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-plaid-env" onChange={e => (window as any).__plaidEnv = e.target.value}>
+                    <option value="sandbox">Sandbox (Testing)</option>
+                    <option value="development">Development</option>
+                    <option value="production">Production</option>
+                  </select>
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-sm">
+                  <p className="font-medium text-blue-700 dark:text-blue-300">How to get Plaid credentials:</p>
+                  <ol className="list-decimal ml-4 mt-1 text-blue-600 dark:text-blue-400 space-y-0.5">
+                    <li>Go to <a href="https://dashboard.plaid.com/signup" target="_blank" className="underline">dashboard.plaid.com</a></li>
+                    <li>Create a free account and access your API keys</li>
+                    <li>Use "Sandbox" environment for testing with simulated banks</li>
+                    <li>Switch to Production when ready for live bank connections</li>
+                  </ol>
+                </div>
+              </CardContent>
+              <CardFooter className="border-t border-border/50 px-6 py-4">
+                <Button onClick={() => {
+                  const id = (window as any).__plaidClientId; const sec = (window as any).__plaidSecret; const env = (window as any).__plaidEnv || "sandbox";
+                  if (id) saveConfig.mutate({ key: "plaid_client_id", value: id });
+                  if (sec) saveConfig.mutate({ key: "plaid_secret", value: sec });
+                  saveConfig.mutate({ key: "plaid_env", value: env });
+                  toast({ title: "Plaid configuration saved!" });
+                }}><Save className="w-4 h-4 mr-2" />Save Plaid Config</Button>
+              </CardFooter>
+            </Card>
+
+            {/* Credit Bureau APIs */}
+            <Card className="glass-panel border-l-4 border-l-indigo-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Key className="w-5 h-5 text-indigo-500" /> Credit Bureau API Keys</CardTitle>
+                <CardDescription>Connect directly to Equifax, Experian, TransUnion, and Innovis for automated report pulls and score monitoring.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[
+                  { bureau: "Equifax", keyField: "equifax_api_key", secretField: "equifax_api_secret", color: "text-red-500", url: "https://developer.equifax.com" },
+                  { bureau: "Experian", keyField: "experian_api_key", secretField: "experian_api_secret", color: "text-blue-600", url: "https://developer.experian.com" },
+                  { bureau: "TransUnion", keyField: "transunion_api_key", secretField: "transunion_api_secret", color: "text-cyan-500", url: "https://developer.transunion.com" },
+                  { bureau: "Innovis", keyField: "innovis_api_key", secretField: "innovis_api_secret", color: "text-purple-500", url: "https://www.innovis.com" },
+                ].map(b => (
+                  <div key={b.bureau} className="p-4 rounded-lg border">
+                    <div className="flex items-center justify-between mb-3">
+                      <Label className={`text-base font-semibold ${b.color}`}>{b.bureau}</Label>
+                      <a href={b.url} target="_blank" className="text-xs text-primary underline">Developer Portal →</a>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Input placeholder={`${b.bureau} API Key`} data-testid={`input-${b.keyField}`} onChange={e => (window as any)[`__${b.keyField}`] = e.target.value} />
+                      <Input type="password" placeholder={`${b.bureau} API Secret`} data-testid={`input-${b.secretField}`} onChange={e => (window as any)[`__${b.secretField}`] = e.target.value} />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+              <CardFooter className="border-t border-border/50 px-6 py-4">
+                <Button onClick={() => {
+                  ["equifax", "experian", "transunion", "innovis"].forEach(b => {
+                    const key = (window as any)[`__${b}_api_key`]; const secret = (window as any)[`__${b}_api_secret`];
+                    if (key) saveConfig.mutate({ key: `${b}_api_key`, value: key });
+                    if (secret) saveConfig.mutate({ key: `${b}_api_secret`, value: secret });
+                  });
+                  toast({ title: "Bureau API credentials saved!" });
+                }}><Save className="w-4 h-4 mr-2" />Save Bureau Credentials</Button>
+              </CardFooter>
+            </Card>
+
+            {/* e-OSCAR */}
+            <Card className="glass-panel">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Database className="w-5 h-5 text-primary" /> e-OSCAR Dispute API</CardTitle>
+                <CardDescription>Automate dispute submissions directly to credit bureaus via the e-OSCAR system.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2"><Label>Company ID</Label><Input placeholder="CRP-98211" data-testid="input-eoscar-company-id" onChange={e => (window as any).__eoscarCompanyId = e.target.value} /></div>
+                  <div className="space-y-2"><Label>API Key</Label><Input type="password" placeholder="Enter e-OSCAR key" data-testid="input-eoscar-key" onChange={e => (window as any).__eoscarKey = e.target.value} /></div>
+                </div>
                 <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border">
                   <div><Label className="text-base">Production Mode</Label><p className="text-sm text-muted-foreground">Disable to use sandbox/test mode.</p></div>
                   <Switch defaultChecked />
                 </div>
               </CardContent>
               <CardFooter className="border-t border-border/50 px-6 py-4">
-                <Button><Save className="w-4 h-4 mr-2" />Save e-OSCAR Config</Button>
+                <Button onClick={() => {
+                  const id = (window as any).__eoscarCompanyId; const key = (window as any).__eoscarKey;
+                  if (id) saveConfig.mutate({ key: "eoscar_company_id", value: id });
+                  if (key) saveConfig.mutate({ key: "eoscar_api_key", value: key });
+                  toast({ title: "e-OSCAR config saved!" });
+                }}><Save className="w-4 h-4 mr-2" />Save e-OSCAR Config</Button>
               </CardFooter>
             </Card>
 
+            {/* Stripe */}
             <Card className="glass-panel">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-indigo-500" /> Stripe Integration</CardTitle>
-                <CardDescription>Enable live payment processing for tradelines and credit products.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-indigo-500" /> Stripe Payments</CardTitle>
+                <CardDescription>Enable live payment processing for tradelines, subscriptions, and credit products.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2"><Label>Publishable Key</Label><Input placeholder="pk_live_..." /></div>
-                <div className="space-y-2"><Label>Secret Key</Label><Input type="password" placeholder="sk_live_..." /></div>
-                <div className="space-y-2"><Label>Webhook Secret</Label><Input type="password" placeholder="whsec_..." /></div>
+                <div className="space-y-2"><Label>Publishable Key</Label><Input placeholder="pk_live_..." data-testid="input-stripe-pk" onChange={e => (window as any).__stripePk = e.target.value} /></div>
+                <div className="space-y-2"><Label>Secret Key</Label><Input type="password" placeholder="sk_live_..." data-testid="input-stripe-sk" onChange={e => (window as any).__stripeSk = e.target.value} /></div>
+                <div className="space-y-2"><Label>Webhook Secret</Label><Input type="password" placeholder="whsec_..." data-testid="input-stripe-wh" onChange={e => (window as any).__stripeWh = e.target.value} /></div>
               </CardContent>
               <CardFooter className="border-t border-border/50 px-6 py-4">
-                <Button><Save className="w-4 h-4 mr-2" />Save Stripe Keys</Button>
+                <Button onClick={() => {
+                  const pk = (window as any).__stripePk; const sk = (window as any).__stripeSk; const wh = (window as any).__stripeWh;
+                  if (pk) saveConfig.mutate({ key: "stripe_publishable_key", value: pk });
+                  if (sk) saveConfig.mutate({ key: "stripe_secret_key", value: sk });
+                  if (wh) saveConfig.mutate({ key: "stripe_webhook_secret", value: wh });
+                  toast({ title: "Stripe keys saved!" });
+                }}><Save className="w-4 h-4 mr-2" />Save Stripe Keys</Button>
               </CardFooter>
             </Card>
 
+            {/* Credit Report Providers */}
             <Card className="glass-panel">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Key className="w-5 h-5" /> Credit Report Providers</CardTitle>
-                <CardDescription>Pull credit reports automatically via SmartCredit, IdentityIQ, or similar.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Key className="w-5 h-5" /> Credit Report Provider</CardTitle>
+                <CardDescription>Connect SmartCredit, IdentityIQ, or similar for automated credit report pulls.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Provider</Label>
-                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <option>SmartCredit API</option>
-                    <option>IdentityIQ Pro</option>
-                    <option>MyFICO</option>
-                    <option>Experian Connect</option>
+                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-report-provider" onChange={e => (window as any).__reportProvider = e.target.value}>
+                    <option value="smartcredit">SmartCredit API</option>
+                    <option value="identityiq">IdentityIQ Pro</option>
+                    <option value="myfico">MyFICO</option>
+                    <option value="experian_connect">Experian Connect</option>
                   </select>
                 </div>
-                <div className="space-y-2"><Label>Partner Token</Label><Input type="password" placeholder="Enter provider token" /></div>
+                <div className="space-y-2"><Label>Partner Token</Label><Input type="password" placeholder="Enter provider token" data-testid="input-report-token" onChange={e => (window as any).__reportToken = e.target.value} /></div>
               </CardContent>
               <CardFooter className="border-t border-border/50 px-6 py-4">
-                <Button>Save Provider</Button>
+                <Button onClick={() => {
+                  const provider = (window as any).__reportProvider || "smartcredit"; const token = (window as any).__reportToken;
+                  saveConfig.mutate({ key: "credit_report_provider", value: provider });
+                  if (token) saveConfig.mutate({ key: "credit_report_token", value: token });
+                  toast({ title: "Report provider saved!" });
+                }}><Save className="w-4 h-4 mr-2" />Save Provider</Button>
               </CardFooter>
             </Card>
           </TabsContent>

@@ -57,8 +57,8 @@ import { ZodError } from "zod";
 import { initializeOnboarding, advanceOnboarding, autoOnboardFromBooking, ONBOARDING_STEPS } from "./onboarding-engine";
 import { createLinkToken, exchangePublicToken, getAccounts, getTransactions, getLiabilities, isPlaidConfigured } from "./plaid-client";
 import { db } from "./db";
+import { sql, eq } from "drizzle-orm";
 import { onboardingSteps, bankAccounts, cryptoWallets, loanApplications, uiCustomization } from "@shared/schema";
-import { eq } from "drizzle-orm";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -1947,6 +1947,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const count = await seedDefaultRules();
       res.json({ seeded: count });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/api/automation/reseed", async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin access required" });
+      await db.execute(sql`DELETE FROM automation_runs`);
+      await db.execute(sql`DELETE FROM automation_rules`);
+      const count = await seedDefaultRules();
+      res.json({ reseeded: count, message: `Cleared and reseeded ${count} automation rules including AI bot workers` });
     } catch (e) { handleError(res, e); }
   });
 

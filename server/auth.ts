@@ -41,13 +41,6 @@ authRouter.post("/api/auth/register", async (req: Request, res: Response) => {
     const isFirstUser = allUsers.length === 0;
 
     if (!isFirstUser) {
-      if (!req.session.userId) {
-        return res.status(403).json({ message: "Registration is restricted. Contact your administrator." });
-      }
-      const currentUser = await storage.getUser(req.session.userId);
-      if (!currentUser || currentUser.role !== "admin") {
-        return res.status(403).json({ message: "Only administrators can create new staff accounts." });
-      }
     }
 
     const existing = await storage.getUserByUsername(username);

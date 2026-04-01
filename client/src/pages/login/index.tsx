@@ -240,56 +240,99 @@ export default function LoginPage() {
               </CardFooter>
             </form>
           ) : (
-            <>
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="w-full grid grid-cols-2 bg-white/[0.04] border-b border-white/10 rounded-none rounded-t-lg">
+                <TabsTrigger value="login" className="text-white/60 data-[state=active]:text-white data-[state=active]:bg-white/[0.06]">Sign In</TabsTrigger>
+                <TabsTrigger value="register" className="text-white/60 data-[state=active]:text-white data-[state=active]:bg-white/[0.06]">Create Account</TabsTrigger>
+              </TabsList>
               {error && (
                 <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2.5 text-sm text-red-400">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
                 </div>
               )}
-              <form onSubmit={handleLogin}>
-                <CardContent className="space-y-4 pt-6">
-                  <div className="space-y-2">
-                    <Label className="text-white/70">Username</Label>
-                    <Input
-                      data-testid="input-login-username"
-                      value={loginForm.username}
-                      onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))}
-                      placeholder="Username"
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
-                      autoComplete="username"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-white/70">Password</Label>
-                    <div className="relative">
+              <TabsContent value="login" className="mt-0">
+                <form onSubmit={handleLogin}>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="space-y-2">
+                      <Label className="text-white/70">Username</Label>
                       <Input
-                        data-testid="input-login-password"
-                        type={showPw ? "text" : "password"}
-                        value={loginForm.password}
-                        onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="Password"
-                        className="bg-white/5 border-white/10 text-white placeholder:text-white/30 pr-10"
-                        autoComplete="current-password"
+                        data-testid="input-login-username"
+                        value={loginForm.username}
+                        onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))}
+                        placeholder="Username"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                        autoComplete="username"
                       />
-                      <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60">
-                        {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
                     </div>
-                  </div>
-                </CardContent>
-                <CardFooter className="pb-6">
-                  <Button
-                    type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-5"
-                    disabled={loading || !loginForm.username || !loginForm.password}
-                    data-testid="button-login"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Lock className="w-4 h-4 mr-2" />}
-                    {loading ? "Signing in..." : "Sign In"}
-                  </Button>
-                </CardFooter>
-              </form>
-            </>
+                    <div className="space-y-2">
+                      <Label className="text-white/70">Password</Label>
+                      <div className="relative">
+                        <Input
+                          data-testid="input-login-password"
+                          type={showPw ? "text" : "password"}
+                          value={loginForm.password}
+                          onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+                          placeholder="Password"
+                          className="bg-white/5 border-white/10 text-white placeholder:text-white/30 pr-10"
+                          autoComplete="current-password"
+                        />
+                        <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60">
+                          {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="pb-6">
+                    <Button
+                      type="submit"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-5"
+                      disabled={loading || !loginForm.username || !loginForm.password}
+                      data-testid="button-login"
+                    >
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Lock className="w-4 h-4 mr-2" />}
+                      {loading ? "Signing in..." : "Sign In"}
+                    </Button>
+                  </CardFooter>
+                </form>
+              </TabsContent>
+              <TabsContent value="register" className="mt-0">
+                <form onSubmit={handleRegister}>
+                  <CardContent className="space-y-4 pt-6">
+                    <div className="space-y-2">
+                      <Label className="text-white/70">Full Name</Label>
+                      <Input value={regForm.fullName} onChange={e => setRegForm(f => ({ ...f, fullName: e.target.value }))} placeholder="John Doe" className="bg-white/5 border-white/10 text-white placeholder:text-white/30" data-testid="input-reg-fullname" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white/70">Email</Label>
+                      <Input type="email" value={regForm.email} onChange={e => setRegForm(f => ({ ...f, email: e.target.value }))} placeholder="you@example.com" className="bg-white/5 border-white/10 text-white placeholder:text-white/30" data-testid="input-reg-email" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white/70">Username *</Label>
+                      <Input data-testid="input-register-username" value={regForm.username} onChange={e => setRegForm(f => ({ ...f, username: e.target.value }))} placeholder="Choose a username" className="bg-white/5 border-white/10 text-white placeholder:text-white/30" autoComplete="username" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white/70">Password *</Label>
+                      <Input data-testid="input-register-password" type="password" value={regForm.password} onChange={e => setRegForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 characters" className="bg-white/5 border-white/10 text-white placeholder:text-white/30" autoComplete="new-password" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white/70">Confirm Password *</Label>
+                      <Input type="password" value={regForm.confirmPassword} onChange={e => setRegForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Confirm password" className="bg-white/5 border-white/10 text-white placeholder:text-white/30" autoComplete="new-password" />
+                    </div>
+                  </CardContent>
+                  <CardFooter className="pb-6">
+                    <Button
+                      type="submit"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-5"
+                      disabled={loading || !regForm.username || !regForm.password}
+                      data-testid="button-register"
+                    >
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                      {loading ? "Creating Account..." : "Create Account"}
+                    </Button>
+                  </CardFooter>
+                </form>
+              </TabsContent>
+            </Tabs>
           )}
         </Card>
 

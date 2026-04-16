@@ -211,7 +211,7 @@ function BotCommandCenter() {
                 <Bot className="w-6 h-6 text-primary" /> AI Bot Command Center
               </CardTitle>
               <CardDescription className="mt-1">
-                Configure, schedule, and manage all 50 AI worker bots. Each bot handles a specialized task — set what they do, when they run, and monitor their activity. Powered by ChatGPT.
+                Configure, schedule, and manage all {BOT_CONFIG.length} AI worker bots. Each bot handles a specialized task — set what they do, when they run, and monitor their activity. Powered by ChatGPT.
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">

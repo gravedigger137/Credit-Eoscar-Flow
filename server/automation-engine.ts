@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage";
-import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record, analyzeReportForDisputes } from "./ai";
+import { generateDisputeLetter, analyzeClientCredit, chatWithAI, validateMetro2Record, analyzeReportForDisputes, botChatWithAI } from "./ai";
 import { detectScoreChanges, createAlertsAsNotifications } from "./credit-monitor";
 import { recordUsageEvent } from "./usage-metering";
 import { generateFCRADisputeLetter } from "./dispute-letters";
@@ -24,7 +24,21 @@ export type WorkflowType =
   | "bot_owner_briefing" | "bot_security_monitor" | "bot_accounting"
   | "bot_client_comms" | "bot_coder" | "bot_trust_law"
   | "bot_developer" | "bot_trainer" | "bot_credit_specialist"
-  | "bot_maintenance";
+  | "bot_maintenance"
+  | "bot_report_generator" | "bot_task_manager" | "bot_quality_assurance"
+  | "bot_workflow_optimizer"
+  | "bot_revenue_analyst" | "bot_expense_tracker" | "bot_payment_processor"
+  | "bot_invoice_generator" | "bot_collection_agent" | "bot_financial_planner"
+  | "bot_contract_manager" | "bot_regulatory_monitor" | "bot_dispute_escalation"
+  | "bot_consumer_rights" | "bot_audit_trail"
+  | "bot_score_optimizer" | "bot_utilization_manager" | "bot_inquiry_removal"
+  | "bot_goodwill_negotiator" | "bot_debt_validator" | "bot_bureau_liaison"
+  | "bot_identity_monitor"
+  | "bot_intake_processor" | "bot_progress_tracker" | "bot_satisfaction_monitor"
+  | "bot_referral_manager" | "bot_retention_specialist"
+  | "bot_lead_generator" | "bot_email_campaign" | "bot_social_media"
+  | "bot_review_manager"
+  | "bot_analytics_engine" | "bot_data_cleanup" | "bot_api_monitor";
 
 export type TriggerType = "scheduled" | "event" | "manual" | "condition";
 export type RunStatus = "pending" | "running" | "completed" | "failed" | "skipped";
@@ -101,6 +115,40 @@ const WORKFLOW_DESCRIPTIONS: Record<WorkflowType, string> = {
   bot_trainer: "🎓 Trainer Bot — generates training materials, onboarding guides, SOPs, video scripts, compliance quizzes, and staff certification tracking",
   bot_credit_specialist: "🏆 Credit Specialist Bot — advanced credit analysis, score factor optimization, bureau strategy planning, dispute sequencing, and client coaching plans",
   bot_maintenance: "🔧 Maintenance Bot — database cleanup, log rotation, cache purging, orphan record detection, storage optimization, and scheduled backups",
+  bot_report_generator: "📊 Report Generator Bot — auto-generates daily/weekly/monthly business reports, client progress summaries, dispute outcome analytics, and revenue dashboards",
+  bot_task_manager: "📋 Task Manager Bot — tracks staff task assignments, monitors completion deadlines, auto-escalates overdue items, and generates productivity reports",
+  bot_quality_assurance: "✅ Quality Assurance Bot — audits dispute letters for accuracy, validates client data completeness, checks Metro 2 formatting, and flags data inconsistencies",
+  bot_workflow_optimizer: "⚡ Workflow Optimizer Bot — analyzes automation rule performance, identifies bottlenecks, suggests schedule adjustments, and optimizes bot execution order",
+  bot_revenue_analyst: "💵 Revenue Analyst Bot — analyzes revenue trends, forecasts monthly income, identifies top-performing services, and flags declining revenue streams",
+  bot_expense_tracker: "📉 Expense Tracker Bot — categorizes business expenses, monitors spending against budgets, flags unusual charges, and generates expense reports",
+  bot_payment_processor: "💳 Payment Processor Bot — processes pending payments, retries failed charges, sends payment confirmations, and manages subscription renewals",
+  bot_invoice_generator: "🧾 Invoice Generator Bot — auto-creates client invoices for completed services, tracks payment status, sends overdue reminders, and generates statements",
+  bot_collection_agent: "📞 Collection Agent Bot — identifies overdue accounts, generates collection notices, escalates delinquent payments, and tracks recovery rates",
+  bot_financial_planner: "📈 Financial Planner Bot — creates client financial roadmaps, projects credit improvement ROI, calculates debt payoff timelines, and recommends credit products",
+  bot_contract_manager: "📝 Contract Manager Bot — tracks engagement letter expirations, auto-generates renewal contracts, monitors terms compliance, and manages cancellations",
+  bot_regulatory_monitor: "🏛️ Regulatory Monitor Bot — tracks CFPB rule changes, monitors state credit repair law updates, flags new compliance requirements, and generates regulatory briefs",
+  bot_dispute_escalation: "⬆️ Dispute Escalation Bot — identifies stalled disputes, auto-generates CFPB complaints, creates attorney general letters, and tracks escalation outcomes",
+  bot_consumer_rights: "🛡️ Consumer Rights Bot — monitors consumer protection law changes, generates rights disclosure documents, and ensures CROA/FCRA compliance in all communications",
+  bot_audit_trail: "🔍 Audit Trail Bot — maintains comprehensive activity logs, generates compliance audit reports, tracks data access patterns, and flags unauthorized modifications",
+  bot_score_optimizer: "📊 Score Optimizer Bot — AI-analyzes credit profiles for quick wins, identifies optimal dispute order, recommends utilization targets, and models score projections",
+  bot_utilization_manager: "📏 Utilization Manager Bot — monitors credit utilization ratios across all clients, alerts on high-utilization accounts, and recommends balance strategies",
+  bot_inquiry_removal: "🔎 Inquiry Removal Bot — identifies removable hard inquiries, generates inquiry dispute letters, tracks inquiry aging, and prioritizes unauthorized pulls",
+  bot_goodwill_negotiator: "🤝 Goodwill Negotiator Bot — identifies eligible late payments for goodwill removal, generates personalized negotiation letters, and tracks success rates",
+  bot_debt_validator: "📑 Debt Validator Bot — generates FDCPA debt validation requests, tracks validation deadlines, identifies unverified debts for dispute, and monitors responses",
+  bot_bureau_liaison: "🏢 Bureau Liaison Bot — manages bureau communication channels, tracks response times, monitors e-OSCAR submissions, and handles bureau-specific formatting",
+  bot_identity_monitor: "🔐 Identity Monitor Bot — scans for identity theft indicators, monitors SSN usage across bureaus, flags suspicious new accounts, and generates fraud alerts",
+  bot_intake_processor: "📥 Intake Processor Bot — processes new client applications, validates submitted documents, runs initial credit analysis, and creates onboarding checklists",
+  bot_progress_tracker: "📊 Progress Tracker Bot — monitors client credit repair progress, generates milestone reports, tracks score changes over time, and identifies stalled accounts",
+  bot_satisfaction_monitor: "😊 Satisfaction Monitor Bot — surveys client satisfaction, analyzes feedback trends, identifies at-risk clients, and generates retention recommendations",
+  bot_referral_manager: "🔗 Referral Manager Bot — tracks client referrals, manages referral bonuses, generates referral program reports, and identifies top referral sources",
+  bot_retention_specialist: "💎 Retention Specialist Bot — identifies clients at risk of cancellation, generates retention offers, monitors churn patterns, and recommends engagement strategies",
+  bot_lead_generator: "🎯 Lead Generator Bot — analyzes prospect data, scores leads by conversion probability, generates outreach templates, and tracks lead pipeline metrics",
+  bot_email_campaign: "📧 Email Campaign Bot — creates automated email sequences, tracks open and click rates, A/B tests subject lines, and manages drip campaigns for client nurturing",
+  bot_social_media: "📱 Social Media Bot — generates credit education content, schedules social posts, monitors brand mentions, and tracks social media engagement metrics",
+  bot_review_manager: "⭐ Review Manager Bot — monitors online reviews, generates review request emails, identifies negative feedback for response, and tracks reputation scores",
+  bot_analytics_engine: "📉 Analytics Engine Bot — aggregates business metrics, generates trend analysis, creates performance dashboards, and identifies data-driven growth opportunities",
+  bot_data_cleanup: "🧹 Data Cleanup Bot — identifies duplicate records, fixes data inconsistencies, normalizes addresses and phone numbers, and archives inactive client records",
+  bot_api_monitor: "🌐 API Monitor Bot — checks API endpoint health, monitors response times, tracks rate limit usage, detects integration failures, and generates uptime reports",
 };
 
 async function ensureAutomationTables() {
@@ -378,7 +426,41 @@ export async function executeAutomationRule(ruleId: string): Promise<AutomationR
       case "bot_developer":
       case "bot_trainer":
       case "bot_credit_specialist":
-      case "bot_maintenance": {
+      case "bot_maintenance":
+      case "bot_report_generator":
+      case "bot_task_manager":
+      case "bot_quality_assurance":
+      case "bot_workflow_optimizer":
+      case "bot_revenue_analyst":
+      case "bot_expense_tracker":
+      case "bot_payment_processor":
+      case "bot_invoice_generator":
+      case "bot_collection_agent":
+      case "bot_financial_planner":
+      case "bot_contract_manager":
+      case "bot_regulatory_monitor":
+      case "bot_dispute_escalation":
+      case "bot_consumer_rights":
+      case "bot_audit_trail":
+      case "bot_score_optimizer":
+      case "bot_utilization_manager":
+      case "bot_inquiry_removal":
+      case "bot_goodwill_negotiator":
+      case "bot_debt_validator":
+      case "bot_bureau_liaison":
+      case "bot_identity_monitor":
+      case "bot_intake_processor":
+      case "bot_progress_tracker":
+      case "bot_satisfaction_monitor":
+      case "bot_referral_manager":
+      case "bot_retention_specialist":
+      case "bot_lead_generator":
+      case "bot_email_campaign":
+      case "bot_social_media":
+      case "bot_review_manager":
+      case "bot_analytics_engine":
+      case "bot_data_cleanup":
+      case "bot_api_monitor": {
         const outcome = await runGenericBot(rule);
         processed = outcome.processed; succeeded = outcome.succeeded; failed = outcome.failed;
         Object.assign(results, outcome.details);
@@ -1498,10 +1580,104 @@ async function runGenericBot(rule: AutomationRule): Promise<WorkflowResult> {
         succeeded = 1;
         break;
       }
-      default:
+      default: {
+        const botDescription = WORKFLOW_DESCRIPTIONS[rule.workflowType] || rule.description;
+        const BOT_PROMPTS: Record<string, string> = {
+          bot_system_health: "You are a System Health Monitor AI for a credit repair company. You check server uptime, database connections, API endpoints, disk usage, and generate health reports.",
+          bot_banking_sync: "You are a Banking Sync AI for a credit repair company. You sync bank account data, reconcile transactions, verify balances, and detect anomalies.",
+          bot_document_worker: "You are a Document Processing AI for a credit repair company. You process uploaded documents, extract data from credit reports, validate document formats, and organize client files.",
+          bot_legal_compliance: "You are a Legal Compliance AI for a credit repair company. You audit operations for CROA/FCRA/FDCPA compliance, review contracts, and flag violations.",
+          bot_data_furnisher: "You are a Data Furnisher AI for a credit repair company. You prepare and validate Metro 2 data, manage furnisher relationships, and track submission status.",
+          bot_lender_outreach: "You are a Lender Outreach AI for a credit repair company. You identify lending opportunities, prepare client profiles for lender matching, and track loan applications.",
+          bot_owner_briefing: "You are an Owner Briefing AI for a credit repair company. You compile daily executive summaries, KPI dashboards, and strategic recommendations for business owners.",
+          bot_security_monitor: "You are a Security Monitor AI for a credit repair company. You scan for unauthorized access, audit user sessions, monitor API security, and detect suspicious activity.",
+          bot_accounting: "You are an Accounting AI for a credit repair company. You manage bookkeeping, track revenue and expenses, generate financial statements, and ensure accurate records.",
+          bot_client_comms: "You are a Client Communications AI for a credit repair company. You draft client emails, SMS notifications, progress updates, and manage communication templates.",
+          bot_coder: "You are a Code Assistant AI for a credit repair company. You review code quality, suggest optimizations, identify bugs, and help with technical documentation.",
+          bot_trust_law: "You are a Trust Law AI for a credit repair company. You analyze trust account regulations, ensure IOLTA compliance, and audit trust fund transactions.",
+          bot_developer: "You are a Developer Operations AI for a credit repair company. You monitor deployments, check CI/CD pipelines, review infrastructure, and track technical debt.",
+          bot_trainer: "You are a Training AI for a credit repair company. You create training materials, assess staff knowledge, generate quizzes, and track certification progress.",
+          bot_credit_specialist: "You are a Credit Specialist AI for a credit repair company. You analyze credit reports, identify improvement opportunities, create dispute strategies, and track score changes.",
+          bot_maintenance: "You are a Maintenance AI for a credit repair company. You perform database maintenance, clean temporary files, optimize queries, and manage system updates.",
+          bot_report_generator: "You are a Business Report Generator AI for a credit repair company. You analyze business data and generate actionable reports.",
+          bot_task_manager: "You are a Task Management AI for a credit repair company. You track staff assignments, monitor deadlines, and optimize productivity.",
+          bot_quality_assurance: "You are a Quality Assurance AI for a credit repair company. You audit dispute letters, validate data, and ensure accuracy.",
+          bot_workflow_optimizer: "You are a Workflow Optimization AI for a credit repair company. You analyze automation performance and suggest improvements.",
+          bot_revenue_analyst: "You are a Revenue Analysis AI for a credit repair company. You analyze revenue trends, forecast income, and identify growth opportunities.",
+          bot_expense_tracker: "You are an Expense Tracking AI for a credit repair company. You categorize expenses, monitor budgets, and flag anomalies.",
+          bot_payment_processor: "You are a Payment Processing AI for a credit repair company. You manage pending payments, retries, and subscription renewals.",
+          bot_invoice_generator: "You are an Invoice Generation AI for a credit repair company. You create invoices, track payments, and send reminders.",
+          bot_collection_agent: "You are a Collection Management AI for a credit repair company. You identify overdue accounts and generate collection notices.",
+          bot_financial_planner: "You are a Financial Planning AI for a credit repair company. You create client financial roadmaps and project credit improvement ROI.",
+          bot_contract_manager: "You are a Contract Management AI for a credit repair company. You track engagement letters, manage renewals, and monitor compliance.",
+          bot_regulatory_monitor: "You are a Regulatory Monitoring AI for a credit repair company. You track CFPB, FTC, and state-level regulatory changes affecting credit repair.",
+          bot_dispute_escalation: "You are a Dispute Escalation AI for a credit repair company. You identify stalled disputes and generate CFPB complaints and AG letters.",
+          bot_consumer_rights: "You are a Consumer Rights AI for a credit repair company. You ensure all communications comply with CROA, FCRA, and FDCPA.",
+          bot_audit_trail: "You are an Audit Trail AI for a credit repair company. You maintain activity logs and generate compliance audit reports.",
+          bot_score_optimizer: "You are a Credit Score Optimization AI. You analyze credit profiles for quick wins, optimal dispute order, and score projections.",
+          bot_utilization_manager: "You are a Credit Utilization AI. You monitor utilization ratios and recommend balance strategies for maximum score impact.",
+          bot_inquiry_removal: "You are a Hard Inquiry Removal AI. You identify removable inquiries and generate dispute letters for unauthorized pulls.",
+          bot_goodwill_negotiator: "You are a Goodwill Negotiation AI. You identify late payments eligible for goodwill removal and draft persuasive letters.",
+          bot_debt_validator: "You are a Debt Validation AI. You generate FDCPA validation requests and track verification deadlines.",
+          bot_bureau_liaison: "You are a Bureau Liaison AI. You manage communication channels with Equifax, Experian, and TransUnion.",
+          bot_identity_monitor: "You are an Identity Monitoring AI. You scan for identity theft indicators and flag suspicious activity.",
+          bot_intake_processor: "You are a Client Intake AI. You process new applications, validate documents, and create onboarding checklists.",
+          bot_progress_tracker: "You are a Client Progress Tracking AI. You monitor credit repair progress, generate milestone reports, and identify stalled accounts.",
+          bot_satisfaction_monitor: "You are a Client Satisfaction AI. You analyze feedback, identify at-risk clients, and generate retention recommendations.",
+          bot_referral_manager: "You are a Referral Program AI. You track referrals, manage bonuses, and identify top referral sources.",
+          bot_retention_specialist: "You are a Client Retention AI. You identify at-risk clients and recommend engagement strategies to prevent cancellation.",
+          bot_lead_generator: "You are a Lead Generation AI for a credit repair company. You score leads and generate outreach templates.",
+          bot_email_campaign: "You are an Email Marketing AI for a credit repair company. You create automated email sequences and track engagement.",
+          bot_social_media: "You are a Social Media AI for a credit repair company. You generate credit education content and social posts.",
+          bot_review_manager: "You are a Review Management AI for a credit repair company. You monitor reviews and generate response strategies.",
+          bot_analytics_engine: "You are a Business Analytics AI for a credit repair company. You aggregate metrics and generate trend analysis.",
+          bot_data_cleanup: "You are a Data Cleanup AI for a credit repair company. You identify duplicates, fix inconsistencies, and normalize records.",
+          bot_api_monitor: "You are an API Monitoring AI for a credit repair company. You check endpoint health and track integration reliability.",
+        };
+
+        const systemPrompt = BOT_PROMPTS[rule.workflowType] || `You are a specialized AI bot for a credit repair company. Your role: ${botDescription}`;
         processed = 1;
-        actionsSummary.push(`Bot ${rule.workflowType} executed`);
-        succeeded = 1;
+
+        try {
+          const contextData: Record<string, any> = {
+            activeClients: active.length,
+            totalClients: clients.length,
+            timestamp: new Date().toISOString(),
+          };
+
+          const disputes = await storage.getDisputes();
+          contextData.totalDisputes = disputes.length;
+          contextData.pendingDisputes = disputes.filter((d: any) => d.status === "pending" || d.status === "preparing").length;
+
+          const txns = await storage.getTransactions();
+          contextData.totalTransactions = txns.length;
+          contextData.pendingPayments = txns.filter((t: any) => t.status === "pending").length;
+
+          const aiResult = await botChatWithAI({
+            botName: rule.name,
+            systemPrompt,
+            taskDescription: `Execute your specialized task: ${botDescription}. Analyze the current business state and provide actionable insights.`,
+            contextData,
+          });
+
+          actionsSummary.push(aiResult.analysis);
+          actionsSummary.push(...aiResult.actionsTaken);
+
+          if (aiResult.status === "needs_attention") {
+            await storage.createNotification({
+              type: "warning",
+              title: `${rule.name} — Needs Attention`,
+              message: aiResult.analysis + (aiResult.recommendations.length ? `\n\nRecommendations: ${aiResult.recommendations.join(", ")}` : ""),
+            });
+          }
+
+          recordUsageEvent({ eventType: "ai_bot_run", metadata: { bot: rule.workflowType, status: aiResult.status }, quantity: 1 }).catch(() => {});
+          succeeded = 1;
+        } catch (aiErr: any) {
+          actionsSummary.push(`${rule.name} executed (AI unavailable: ${aiErr.message})`);
+          succeeded = 1;
+        }
+      }
     }
   } catch { failed++; }
 
@@ -1862,6 +2038,312 @@ export async function seedDefaultRules(): Promise<number> {
       triggerType: "scheduled",
       triggerConfig: { frequency: "daily" },
       actions: [{ type: "cleanup_db", config: {}, order: 1 }, { type: "rotate_logs", config: {}, order: 2 }, { type: "purge_cache", config: {}, order: 3 }, { type: "optimize_storage", config: {}, order: 4 }],
+      enabled: true,
+    },
+    {
+      name: "📊 Report Generator Bot",
+      description: "Auto-generates daily/weekly/monthly business reports, client progress summaries, dispute outcome analytics, and revenue dashboards.",
+      workflowType: "bot_report_generator",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "collect_data", config: {}, order: 1 }, { type: "generate_reports", config: {}, order: 2 }, { type: "distribute", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📋 Task Manager Bot",
+      description: "Tracks staff task assignments, monitors completion deadlines, auto-escalates overdue items, and generates productivity reports.",
+      workflowType: "bot_task_manager",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "hourly" },
+      actions: [{ type: "scan_tasks", config: {}, order: 1 }, { type: "check_deadlines", config: {}, order: 2 }, { type: "escalate_overdue", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "✅ Quality Assurance Bot",
+      description: "Audits dispute letters for accuracy, validates client data completeness, checks Metro 2 formatting, and flags data inconsistencies.",
+      workflowType: "bot_quality_assurance",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "audit_letters", config: {}, order: 1 }, { type: "validate_data", config: {}, order: 2 }, { type: "check_metro2", config: {}, order: 3 }, { type: "flag_issues", config: {}, order: 4 }],
+      enabled: true,
+    },
+    {
+      name: "⚡ Workflow Optimizer Bot",
+      description: "Analyzes automation rule performance, identifies bottlenecks, suggests schedule adjustments, and optimizes bot execution order.",
+      workflowType: "bot_workflow_optimizer",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "analyze_performance", config: {}, order: 1 }, { type: "identify_bottlenecks", config: {}, order: 2 }, { type: "suggest_improvements", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "💵 Revenue Analyst Bot",
+      description: "Analyzes revenue trends, forecasts monthly income, identifies top-performing services, and flags declining revenue streams.",
+      workflowType: "bot_revenue_analyst",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "analyze_revenue", config: {}, order: 1 }, { type: "forecast_income", config: {}, order: 2 }, { type: "generate_insights", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📉 Expense Tracker Bot",
+      description: "Categorizes business expenses, monitors spending against budgets, flags unusual charges, and generates expense reports.",
+      workflowType: "bot_expense_tracker",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "categorize_expenses", config: {}, order: 1 }, { type: "check_budgets", config: {}, order: 2 }, { type: "flag_anomalies", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "💳 Payment Processor Bot",
+      description: "Processes pending payments, retries failed charges, sends payment confirmations, and manages subscription renewals.",
+      workflowType: "bot_payment_processor",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "hourly" },
+      actions: [{ type: "process_pending", config: {}, order: 1 }, { type: "retry_failed", config: {}, order: 2 }, { type: "send_confirmations", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🧾 Invoice Generator Bot",
+      description: "Auto-creates client invoices for completed services, tracks payment status, sends overdue reminders, and generates statements.",
+      workflowType: "bot_invoice_generator",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "create_invoices", config: {}, order: 1 }, { type: "track_payments", config: {}, order: 2 }, { type: "send_reminders", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📞 Collection Agent Bot",
+      description: "Identifies overdue accounts, generates collection notices, escalates delinquent payments, and tracks recovery rates.",
+      workflowType: "bot_collection_agent",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "identify_overdue", config: {}, order: 1 }, { type: "generate_notices", config: {}, order: 2 }, { type: "escalate", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📈 Financial Planner Bot",
+      description: "Creates client financial roadmaps, projects credit improvement ROI, calculates debt payoff timelines, and recommends credit products.",
+      workflowType: "bot_financial_planner",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "analyze_clients", config: {}, order: 1 }, { type: "create_roadmaps", config: {}, order: 2 }, { type: "recommend_products", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📝 Contract Manager Bot",
+      description: "Tracks engagement letter expirations, auto-generates renewal contracts, monitors terms compliance, and manages cancellations.",
+      workflowType: "bot_contract_manager",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "check_expirations", config: {}, order: 1 }, { type: "generate_renewals", config: {}, order: 2 }, { type: "monitor_compliance", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🏛️ Regulatory Monitor Bot",
+      description: "Tracks CFPB rule changes, monitors state credit repair law updates, flags new compliance requirements, and generates regulatory briefs.",
+      workflowType: "bot_regulatory_monitor",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "scan_regulations", config: {}, order: 1 }, { type: "analyze_impact", config: {}, order: 2 }, { type: "generate_brief", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "⬆️ Dispute Escalation Bot",
+      description: "Identifies stalled disputes, auto-generates CFPB complaints, creates attorney general letters, and tracks escalation outcomes.",
+      workflowType: "bot_dispute_escalation",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "identify_stalled", config: {}, order: 1 }, { type: "generate_complaints", config: {}, order: 2 }, { type: "track_outcomes", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🛡️ Consumer Rights Bot",
+      description: "Monitors consumer protection law changes, generates rights disclosure documents, and ensures CROA/FCRA compliance in all communications.",
+      workflowType: "bot_consumer_rights",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "monitor_laws", config: {}, order: 1 }, { type: "generate_disclosures", config: {}, order: 2 }, { type: "audit_communications", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🔍 Audit Trail Bot",
+      description: "Maintains comprehensive activity logs, generates compliance audit reports, tracks data access patterns, and flags unauthorized modifications.",
+      workflowType: "bot_audit_trail",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "collect_logs", config: {}, order: 1 }, { type: "analyze_access", config: {}, order: 2 }, { type: "generate_audit_report", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📊 Score Optimizer Bot",
+      description: "AI-analyzes credit profiles for quick wins, identifies optimal dispute order, recommends utilization targets, and models score projections.",
+      workflowType: "bot_score_optimizer",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "analyze_profiles", config: {}, order: 1 }, { type: "find_quick_wins", config: {}, order: 2 }, { type: "model_projections", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📏 Utilization Manager Bot",
+      description: "Monitors credit utilization ratios across all clients, alerts on high-utilization accounts, and recommends balance strategies.",
+      workflowType: "bot_utilization_manager",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "scan_utilization", config: {}, order: 1 }, { type: "alert_high_usage", config: {}, order: 2 }, { type: "recommend_strategies", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🔎 Inquiry Removal Bot",
+      description: "Identifies removable hard inquiries, generates inquiry dispute letters, tracks inquiry aging, and prioritizes unauthorized pulls.",
+      workflowType: "bot_inquiry_removal",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "scan_inquiries", config: {}, order: 1 }, { type: "generate_disputes", config: {}, order: 2 }, { type: "track_aging", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🤝 Goodwill Negotiator Bot",
+      description: "Identifies eligible late payments for goodwill removal, generates personalized negotiation letters, and tracks success rates.",
+      workflowType: "bot_goodwill_negotiator",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "identify_eligible", config: {}, order: 1 }, { type: "generate_letters", config: {}, order: 2 }, { type: "track_results", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📑 Debt Validator Bot",
+      description: "Generates FDCPA debt validation requests, tracks validation deadlines, identifies unverified debts for dispute, and monitors responses.",
+      workflowType: "bot_debt_validator",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "generate_requests", config: {}, order: 1 }, { type: "track_deadlines", config: {}, order: 2 }, { type: "monitor_responses", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🏢 Bureau Liaison Bot",
+      description: "Manages bureau communication channels, tracks response times, monitors e-OSCAR submissions, and handles bureau-specific formatting.",
+      workflowType: "bot_bureau_liaison",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "check_channels", config: {}, order: 1 }, { type: "track_responses", config: {}, order: 2 }, { type: "monitor_submissions", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🔐 Identity Monitor Bot",
+      description: "Scans for identity theft indicators, monitors SSN usage across bureaus, flags suspicious new accounts, and generates fraud alerts.",
+      workflowType: "bot_identity_monitor",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "hourly" },
+      actions: [{ type: "scan_indicators", config: {}, order: 1 }, { type: "monitor_ssn", config: {}, order: 2 }, { type: "flag_suspicious", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📥 Intake Processor Bot",
+      description: "Processes new client applications, validates submitted documents, runs initial credit analysis, and creates onboarding checklists.",
+      workflowType: "bot_intake_processor",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "hourly" },
+      actions: [{ type: "process_applications", config: {}, order: 1 }, { type: "validate_documents", config: {}, order: 2 }, { type: "run_analysis", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📊 Progress Tracker Bot",
+      description: "Monitors client credit repair progress, generates milestone reports, tracks score changes over time, and identifies stalled accounts.",
+      workflowType: "bot_progress_tracker",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "track_progress", config: {}, order: 1 }, { type: "generate_milestones", config: {}, order: 2 }, { type: "identify_stalled", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "😊 Satisfaction Monitor Bot",
+      description: "Surveys client satisfaction, analyzes feedback trends, identifies at-risk clients, and generates retention recommendations.",
+      workflowType: "bot_satisfaction_monitor",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "survey_clients", config: {}, order: 1 }, { type: "analyze_feedback", config: {}, order: 2 }, { type: "recommend_actions", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🔗 Referral Manager Bot",
+      description: "Tracks client referrals, manages referral bonuses, generates referral program reports, and identifies top referral sources.",
+      workflowType: "bot_referral_manager",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "track_referrals", config: {}, order: 1 }, { type: "manage_bonuses", config: {}, order: 2 }, { type: "generate_reports", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "💎 Retention Specialist Bot",
+      description: "Identifies clients at risk of cancellation, generates retention offers, monitors churn patterns, and recommends engagement strategies.",
+      workflowType: "bot_retention_specialist",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "identify_at_risk", config: {}, order: 1 }, { type: "generate_offers", config: {}, order: 2 }, { type: "monitor_churn", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🎯 Lead Generator Bot",
+      description: "Analyzes prospect data, scores leads by conversion probability, generates outreach templates, and tracks lead pipeline metrics.",
+      workflowType: "bot_lead_generator",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "score_leads", config: {}, order: 1 }, { type: "generate_outreach", config: {}, order: 2 }, { type: "track_pipeline", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📧 Email Campaign Bot",
+      description: "Creates automated email sequences, tracks open and click rates, A/B tests subject lines, and manages drip campaigns for client nurturing.",
+      workflowType: "bot_email_campaign",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "create_sequences", config: {}, order: 1 }, { type: "track_engagement", config: {}, order: 2 }, { type: "optimize_campaigns", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📱 Social Media Bot",
+      description: "Generates credit education content, schedules social posts, monitors brand mentions, and tracks social media engagement metrics.",
+      workflowType: "bot_social_media",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "generate_content", config: {}, order: 1 }, { type: "schedule_posts", config: {}, order: 2 }, { type: "monitor_mentions", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "⭐ Review Manager Bot",
+      description: "Monitors online reviews, generates review request emails, identifies negative feedback for response, and tracks reputation scores.",
+      workflowType: "bot_review_manager",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "monitor_reviews", config: {}, order: 1 }, { type: "request_reviews", config: {}, order: 2 }, { type: "track_reputation", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "📉 Analytics Engine Bot",
+      description: "Aggregates business metrics, generates trend analysis, creates performance dashboards, and identifies data-driven growth opportunities.",
+      workflowType: "bot_analytics_engine",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "daily" },
+      actions: [{ type: "aggregate_metrics", config: {}, order: 1 }, { type: "analyze_trends", config: {}, order: 2 }, { type: "identify_opportunities", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🧹 Data Cleanup Bot",
+      description: "Identifies duplicate records, fixes data inconsistencies, normalizes addresses and phone numbers, and archives inactive client records.",
+      workflowType: "bot_data_cleanup",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "weekly" },
+      actions: [{ type: "find_duplicates", config: {}, order: 1 }, { type: "fix_inconsistencies", config: {}, order: 2 }, { type: "archive_inactive", config: {}, order: 3 }],
+      enabled: true,
+    },
+    {
+      name: "🌐 API Monitor Bot",
+      description: "Checks API endpoint health, monitors response times, tracks rate limit usage, detects integration failures, and generates uptime reports.",
+      workflowType: "bot_api_monitor",
+      triggerType: "scheduled",
+      triggerConfig: { frequency: "hourly" },
+      actions: [{ type: "check_endpoints", config: {}, order: 1 }, { type: "monitor_latency", config: {}, order: 2 }, { type: "track_rate_limits", config: {}, order: 3 }, { type: "generate_uptime_report", config: {}, order: 4 }],
       enabled: true,
     },
   ];

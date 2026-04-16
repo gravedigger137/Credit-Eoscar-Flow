@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Save, Key, Building, Database, Bot, ShieldCheck, Lock, Bell, CreditCard, Crown, Zap, Users, FileText, BarChart3, Shield, Play, Clock, CheckCircle2, XCircle, RefreshCw, Settings2, Activity, Code, Scale, Wrench, GraduationCap, Trophy, Hammer } from "lucide-react";
+import { Save, Key, Building, Database, Bot, ShieldCheck, Lock, Bell, CreditCard, Crown, Zap, Users, FileText, BarChart3, Shield, Play, Clock, CheckCircle2, XCircle, RefreshCw, Settings2, Activity, Code, Scale, Wrench, GraduationCap, Trophy, Hammer, TrendingUp, DollarSign, Receipt, Phone, Briefcase, ScrollText, Landmark, ArrowUpCircle, ShieldAlert, Search, Target, Gauge, Eye, Handshake, FileCheck, Sparkles, Star, Heart, Link, Gem, Mail, Share2, MessageSquare, PieChart, Trash2, Globe } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -105,6 +105,40 @@ const BOT_CONFIG = [
   { type: "bot_trainer", icon: GraduationCap, color: "text-teal-500", bg: "bg-teal-500/10", border: "border-teal-500/30", category: "operations" },
   { type: "bot_credit_specialist", icon: Trophy, color: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/30", category: "credit" },
   { type: "bot_maintenance", icon: Hammer, color: "text-stone-500", bg: "bg-stone-500/10", border: "border-stone-500/30", category: "development" },
+  { type: "bot_report_generator", icon: PieChart, color: "text-blue-600", bg: "bg-blue-600/10", border: "border-blue-600/30", category: "operations" },
+  { type: "bot_task_manager", icon: FileCheck, color: "text-indigo-600", bg: "bg-indigo-600/10", border: "border-indigo-600/30", category: "operations" },
+  { type: "bot_quality_assurance", icon: CheckCircle2, color: "text-green-600", bg: "bg-green-600/10", border: "border-green-600/30", category: "operations" },
+  { type: "bot_workflow_optimizer", icon: Zap, color: "text-amber-600", bg: "bg-amber-600/10", border: "border-amber-600/30", category: "operations" },
+  { type: "bot_revenue_analyst", icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-600/10", border: "border-emerald-600/30", category: "financial" },
+  { type: "bot_expense_tracker", icon: TrendingUp, color: "text-red-600", bg: "bg-red-600/10", border: "border-red-600/30", category: "financial" },
+  { type: "bot_payment_processor", icon: CreditCard, color: "text-violet-600", bg: "bg-violet-600/10", border: "border-violet-600/30", category: "financial" },
+  { type: "bot_invoice_generator", icon: Receipt, color: "text-teal-600", bg: "bg-teal-600/10", border: "border-teal-600/30", category: "financial" },
+  { type: "bot_collection_agent", icon: Phone, color: "text-rose-600", bg: "bg-rose-600/10", border: "border-rose-600/30", category: "financial" },
+  { type: "bot_financial_planner", icon: Briefcase, color: "text-blue-700", bg: "bg-blue-700/10", border: "border-blue-700/30", category: "financial" },
+  { type: "bot_contract_manager", icon: ScrollText, color: "text-amber-700", bg: "bg-amber-700/10", border: "border-amber-700/30", category: "legal" },
+  { type: "bot_regulatory_monitor", icon: Landmark, color: "text-indigo-700", bg: "bg-indigo-700/10", border: "border-indigo-700/30", category: "legal" },
+  { type: "bot_dispute_escalation", icon: ArrowUpCircle, color: "text-red-700", bg: "bg-red-700/10", border: "border-red-700/30", category: "legal" },
+  { type: "bot_consumer_rights", icon: ShieldAlert, color: "text-emerald-700", bg: "bg-emerald-700/10", border: "border-emerald-700/30", category: "legal" },
+  { type: "bot_audit_trail", icon: Search, color: "text-gray-600", bg: "bg-gray-600/10", border: "border-gray-600/30", category: "legal" },
+  { type: "bot_score_optimizer", icon: Target, color: "text-orange-700", bg: "bg-orange-700/10", border: "border-orange-700/30", category: "credit" },
+  { type: "bot_utilization_manager", icon: Gauge, color: "text-cyan-700", bg: "bg-cyan-700/10", border: "border-cyan-700/30", category: "credit" },
+  { type: "bot_inquiry_removal", icon: Eye, color: "text-purple-700", bg: "bg-purple-700/10", border: "border-purple-700/30", category: "credit" },
+  { type: "bot_goodwill_negotiator", icon: Handshake, color: "text-teal-700", bg: "bg-teal-700/10", border: "border-teal-700/30", category: "credit" },
+  { type: "bot_debt_validator", icon: FileCheck, color: "text-rose-700", bg: "bg-rose-700/10", border: "border-rose-700/30", category: "credit" },
+  { type: "bot_bureau_liaison", icon: Building, color: "text-sky-700", bg: "bg-sky-700/10", border: "border-sky-700/30", category: "credit" },
+  { type: "bot_identity_monitor", icon: Lock, color: "text-violet-700", bg: "bg-violet-700/10", border: "border-violet-700/30", category: "credit" },
+  { type: "bot_intake_processor", icon: Sparkles, color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/30", category: "client_services" },
+  { type: "bot_progress_tracker", icon: BarChart3, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/30", category: "client_services" },
+  { type: "bot_satisfaction_monitor", icon: Heart, color: "text-pink-600", bg: "bg-pink-600/10", border: "border-pink-600/30", category: "client_services" },
+  { type: "bot_referral_manager", icon: Link, color: "text-indigo-600", bg: "bg-indigo-600/10", border: "border-indigo-600/30", category: "client_services" },
+  { type: "bot_retention_specialist", icon: Gem, color: "text-purple-600", bg: "bg-purple-600/10", border: "border-purple-600/30", category: "client_services" },
+  { type: "bot_lead_generator", icon: Target, color: "text-green-700", bg: "bg-green-700/10", border: "border-green-700/30", category: "marketing" },
+  { type: "bot_email_campaign", icon: Mail, color: "text-blue-600", bg: "bg-blue-600/10", border: "border-blue-600/30", category: "marketing" },
+  { type: "bot_social_media", icon: Share2, color: "text-pink-500", bg: "bg-pink-500/10", border: "border-pink-500/30", category: "marketing" },
+  { type: "bot_review_manager", icon: Star, color: "text-yellow-600", bg: "bg-yellow-600/10", border: "border-yellow-600/30", category: "marketing" },
+  { type: "bot_analytics_engine", icon: PieChart, color: "text-indigo-500", bg: "bg-indigo-500/10", border: "border-indigo-500/30", category: "data_analytics" },
+  { type: "bot_data_cleanup", icon: Trash2, color: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/30", category: "data_analytics" },
+  { type: "bot_api_monitor", icon: Globe, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", category: "development" },
 ];
 
 function BotCommandCenter() {
@@ -177,7 +211,7 @@ function BotCommandCenter() {
                 <Bot className="w-6 h-6 text-primary" /> AI Bot Command Center
               </CardTitle>
               <CardDescription className="mt-1">
-                Configure, schedule, and manage all {botRules.length} AI worker bots. Each bot handles a specialized task — set what they do, when they run, and monitor their activity.
+                Configure, schedule, and manage all 50 AI worker bots. Each bot handles a specialized task — set what they do, when they run, and monitor their activity. Powered by ChatGPT.
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
@@ -198,6 +232,9 @@ function BotCommandCenter() {
               { val: "financial", label: "Financial" },
               { val: "legal", label: "Legal" },
               { val: "credit", label: "Credit" },
+              { val: "client_services", label: "Client Services" },
+              { val: "marketing", label: "Marketing" },
+              { val: "data_analytics", label: "Data & Analytics" },
               { val: "development", label: "Development" },
             ].map(f => (
               <Button key={f.val} size="sm" variant={filter === f.val ? "default" : "outline"} onClick={() => setFilter(f.val)} data-testid={`filter-${f.val}`}>
@@ -225,6 +262,7 @@ function BotCommandCenter() {
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-sm truncate">{rule.name}</span>
                           <Badge variant="secondary" className="text-[10px] capitalize shrink-0">{freq}</Badge>
+                          <Badge variant="outline" className="text-[9px] shrink-0 border-emerald-500/50 text-emerald-600 bg-emerald-500/5">GPT-4o</Badge>
                           {lastRun && (
                             <Badge variant={lastRun.status === "completed" ? "outline" : "destructive"} className="text-[10px] shrink-0">
                               {lastRun.status === "completed" ? <CheckCircle2 className="w-3 h-3 mr-0.5" /> : <XCircle className="w-3 h-3 mr-0.5" />}

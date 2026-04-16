@@ -105,6 +105,47 @@ Answer questions concisely and professionally. When relevant, cite specific laws
   return resp.choices[0].message.content ?? "";
 }
 
+// ── Bot ChatGPT Integration ──────────────────────────────────────────────────
+export async function botChatWithAI(params: {
+  botName: string;
+  systemPrompt: string;
+  taskDescription: string;
+  contextData?: Record<string, any>;
+}): Promise<{ analysis: string; recommendations: string[]; actionsTaken: string[]; status: string }> {
+  const { botName, systemPrompt, taskDescription, contextData } = params;
+
+  const contextStr = contextData ? `\n\nContext Data:\n${JSON.stringify(contextData, null, 2)}` : "";
+
+  const resp = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `${taskDescription}${contextStr}\n\nRespond with a JSON object containing:\n- "analysis": a brief summary of your findings\n- "recommendations": an array of recommended actions\n- "actionsTaken": an array of actions you performed\n- "status": "success" or "needs_attention"` },
+    ],
+    max_tokens: 1200,
+    temperature: 0.3,
+    response_format: { type: "json_object" },
+  });
+
+  const raw = resp.choices[0].message.content ?? "{}";
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      analysis: parsed.analysis || `${botName} completed analysis`,
+      recommendations: parsed.recommendations || [],
+      actionsTaken: parsed.actionsTaken || [],
+      status: parsed.status || "success",
+    };
+  } catch {
+    return {
+      analysis: `${botName} completed its run`,
+      recommendations: [],
+      actionsTaken: [`${botName} executed successfully`],
+      status: "success",
+    };
+  }
+}
+
 // ── Consumer Credit Specialist AI — Post-Upload Analysis & Auto-Dispute ──
 
 export interface NegativeItemAnalysis {

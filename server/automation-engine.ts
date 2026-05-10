@@ -330,7 +330,7 @@ async function runAutoDispute(rule: AutomationRule): Promise<WorkflowResult> {
   const disputesCreated: any[] = [];
 
   for (const client of active) {
-    const reports = await storage.getReportsByClient(client.id);
+    const reports = await storage.getCreditReportsByClient(client.id);
     if (!reports.length) continue;
     const latest = reports[reports.length - 1] as any;
     const negItems = (latest.negativeItems || []) as string[];
@@ -537,7 +537,7 @@ async function runClientOnboarding(rule: AutomationRule): Promise<WorkflowResult
   for (const client of newClients) {
     processed++;
     try {
-      const existingReports = await storage.getReportsByClient(client.id);
+      const existingReports = await storage.getCreditReportsByClient(client.id);
       if (existingReports.length > 0) { succeeded++; continue; }
 
       await storage.createNotification({
@@ -574,11 +574,12 @@ async function runAIAnalysis(): Promise<WorkflowResult> {
       const disputes = await storage.getDisputesByClient(client.id);
       const negItems = disputes.map((d: any) => d.accountName);
 
+      const goalScore = (client as any).goalScore;
       const analysis = await analyzeClientCredit({
         clientName: `${client.firstName} ${client.lastName}`,
         scores,
         negativeItems: negItems,
-        goal: client.goalScore ? `Reach ${client.goalScore} score` : undefined,
+        goal: goalScore ? `Reach ${goalScore} score` : undefined,
       });
 
       await storage.createNotification({
@@ -727,7 +728,7 @@ async function runReportPull(): Promise<WorkflowResult> {
 
   for (const client of active) {
     processed++;
-    const reports = await storage.getReportsByClient(client.id);
+    const reports = await storage.getCreditReportsByClient(client.id);
     const latestDate = reports.length > 0 ? new Date(reports[reports.length - 1].createdAt || 0) : null;
     const daysSinceLastPull = latestDate ? (Date.now() - latestDate.getTime()) / (1000 * 60 * 60 * 24) : 999;
 
@@ -762,7 +763,7 @@ async function runTradelineReview(): Promise<WorkflowResult> {
         try {
           await storage.createNotification({
             type: "warning",
-            title: `Tradeline Not Reporting: ${tl.cardholderName || tl.id}`,
+            title: `Tradeline Not Reporting: ${tl.cardHolder || tl.id}`,
             message: `Tradeline placed ${Math.round(daysSincePlaced)} days ago has not been confirmed as reported. Follow up with AU partner.`,
             clientId: tl.clientId,
           });

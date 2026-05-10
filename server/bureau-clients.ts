@@ -26,7 +26,7 @@ export interface BureauReportRequest {
 }
 
 export interface BureauReportResponse {
-  bureau: "equifax" | "experian" | "transunion";
+  bureau: "equifax" | "experian" | "transunion" | "innovis";
   score: number | null;
   reportId: string;
   rawData: string;

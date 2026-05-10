@@ -1,3 +1,4 @@
+import "dotenv/config";
 import crypto from "crypto";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
@@ -118,8 +119,7 @@ app.use((req, res, next) => {
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host: "localhost",
     },
     () => {
       log(`serving on port ${port}`);

@@ -5,9 +5,9 @@ import { z } from "zod";
 
 // ─── ENUMS ───────────────────────────────────────────────────────────────────
 export const clientStatusEnum = pgEnum("client_status", ["onboarding", "active", "paused", "completed"]);
-export const disputeStatusEnum = pgEnum("dispute_status", ["preparing", "sent", "validated", "deleted", "rejected", "closed"]);
+export const disputeStatusEnum = pgEnum("dispute_status", ["preparing", "pending", "sent", "validated", "no_response", "deleted", "rejected", "verified", "closed"]);
 export const bureauEnum = pgEnum("bureau", ["equifax", "experian", "transunion"]);
-export const tradelineStatusEnum = pgEnum("tradeline_status", ["pending", "active", "removed", "expired"]);
+export const tradelineStatusEnum = pgEnum("tradeline_status", ["pending", "placed", "active", "removed", "expired"]);
 export const creditLineStatusEnum = pgEnum("credit_line_status", ["applied", "reviewing", "approved", "active", "rejected", "closed"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["dispute", "billing", "client", "compliance", "success", "warning"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "failed", "refunded"]);

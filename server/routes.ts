@@ -96,6 +96,10 @@ function handleError(res: Response, err: unknown) {
   return res.status(500).json({ message: "Internal server error" });
 }
 
+function getRouteParam(param: string | string[] | undefined): string {
+  return Array.isArray(param) ? param[0] : param || "";
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
   // ─── DASHBOARD ─────────────────────────────────────────────────────────────
@@ -1028,7 +1032,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── CLIENT DOCUMENT UPLOAD ─────────────────────────────────────────────
   app.get("/api/clients/:clientId/documents", async (req, res) => {
     try {
-      const docs = await storage.getDocumentsByClient(req.params.clientId);
+      const clientId = getRouteParam(req.params.clientId);
+      const docs = await storage.getDocumentsByClient(clientId);
       res.json(docs);
     } catch (e) { handleError(res, e); }
   });
@@ -1037,7 +1042,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const file = req.file;
     try {
       if (!file) return res.status(400).json({ message: "No file uploaded" });
-      const client = await storage.getClient(req.params.clientId);
+      const clientId = getRouteParam(req.params.clientId);
+      const client = await storage.getClient(clientId);
       if (!client) {
         fs.unlinkSync(file.path);
         return res.status(404).json({ message: "Client not found" });
@@ -1046,7 +1052,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const category = validCategories.includes(req.body.category) ? req.body.category : "credit_report";
       const notes = typeof req.body.notes === "string" ? req.body.notes.slice(0, 500) : null;
       const doc = await storage.createDocument({
-        clientId: req.params.clientId,
+        clientId,
         fileName: file.filename,
         originalName: file.originalname,
         mimeType: file.mimetype,
@@ -1064,7 +1070,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       } catch (_) {}
 
       if (category === "credit_report" && /\.(pdf|xml|txt)$/i.test(file.originalname)) {
-        autoAnalyzeAndDispute(req.params.clientId, file.path, file.originalname).catch((err) => {
+        autoAnalyzeAndDispute(clientId, file.path, file.originalname).catch((err) => {
           console.error("[Auto-Analyze] Background pipeline error:", err.message);
         });
       }
@@ -1343,7 +1349,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let disputesFailed = 0;
     const sortedItems = [...specialistReport.negativeItemAnalysis].sort((a, b) => b.priorityScore - a.priorityScore);
 
-    const bureaus = ["equifax", "experian", "transunion"];
+    const bureaus = ["equifax", "experian", "transunion"] as const;
 
     for (const item of sortedItems) {
       for (const bureau of bureaus) {
@@ -1398,10 +1404,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/clients/:clientId/auto-analyze", async (req, res) => {
     try {
-      const client = await storage.getClient(req.params.clientId);
+      const clientId = getRouteParam(req.params.clientId);
+      const client = await storage.getClient(clientId);
       if (!client) return res.status(404).json({ message: "Client not found" });
 
-      const disputes = await storage.getDisputesByClient(req.params.clientId);
+      const disputes = await storage.getDisputesByClient(clientId);
 
       const negativeItems = disputes.map((d: any) => ({
         creditorName: d.accountName,
@@ -1436,7 +1443,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       });
 
-      recordUsageEvent({ eventType: "ai_analysis", clientId: req.params.clientId, metadata: { type: "credit_specialist_manual" }, quantity: 1 }).catch(() => {});
+      recordUsageEvent({ eventType: "ai_analysis", clientId, metadata: { type: "credit_specialist_manual" }, quantity: 1 }).catch(() => {});
 
       const existingKeys = new Set(disputes.map((d: any) => `${d.accountName?.toLowerCase()}::${d.bureau}`));
       let disputesCreated = 0;
@@ -1444,7 +1451,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const sorted = [...specialistReport.negativeItemAnalysis].sort((a, b) => b.priorityScore - a.priorityScore);
 
       for (const item of sorted) {
-        for (const bureau of ["equifax", "experian", "transunion"]) {
+        for (const bureau of ["equifax", "experian", "transunion"] as const) {
           const key = `${item.creditorName.toLowerCase()}::${bureau}`;
           if (existingKeys.has(key)) continue;
 
@@ -1462,7 +1469,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             });
 
             await storage.createDispute({
-              clientId: req.params.clientId,
+              clientId,
               bureau,
               accountName: item.creditorName,
               accountNumber: item.accountNumber || undefined,

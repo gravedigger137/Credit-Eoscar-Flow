@@ -1,3 +1,4 @@
+import 'dd-trace/init';
 import "dotenv/config";
 import crypto from "crypto";
 import express, { type Request, Response, NextFunction } from "express";

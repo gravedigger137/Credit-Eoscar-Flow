@@ -16,6 +16,7 @@
     "noEmit": true,
     "module": "ESNext",
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "lib": [
       "esnext",
       "dom",

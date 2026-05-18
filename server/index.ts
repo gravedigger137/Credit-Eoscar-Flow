@@ -1,14 +1,18 @@
 import 'dd-trace/init';
 import "dotenv/config";
 import crypto from "crypto";
-import express, { type Request, Response, NextFunction } from "express";
+import express, { Router, type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { authRouter, requireAuth } from "./auth";
+import { requireAuth } from "./auth";
+import { authRouter } from "./routes/auth.routes";
+import { aiRouter } from "./routes/ai.routes";
+import { creditRouter } from "./routes/credit.routes";
 import { setupOAuth, registerOAuthRoutes } from "./oauth";
+import { pool } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -30,6 +34,19 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.get("/health", (_req, res) => {
+  res.json({ ok: true, service: "credit-eoscar-flow" });
+});
+
+app.get("/ready", async (_req, res) => {
+  try {
+    await pool.query("select 1");
+    res.json({ ok: true, database: "ready" });
+  } catch (err) {
+    res.status(503).json({ ok: false, database: "unavailable" });
+  }
+});
 
 const PgStore = connectPgSimple(session);
 
@@ -79,11 +96,12 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  app.use(authRouter);
+  app.use("/api/v1", authRouter);
+  app.use("/api", authRouter);
   setupOAuth();
   registerOAuthRoutes(app);
 
-  app.use("/api", (req, res, next) => {
+  const authGate = (req: Request, res: Response, next: NextFunction) => {
     if (
       req.path === "/auth/login" ||
       req.path === "/auth/register" ||
@@ -109,9 +127,19 @@ app.use((req, res, next) => {
       return next();
     }
     requireAuth(req, res, next);
-  });
+  };
 
-  await registerRoutes(httpServer, app);
+  app.use("/api/v1", authGate);
+  app.use("/api", authGate);
+
+  const v1Router = Router();
+  v1Router.use("/credit", creditRouter);
+  v1Router.use("/ai", aiRouter);
+
+  await registerRoutes(httpServer, v1Router);
+
+  app.use("/api/v1", v1Router);
+  app.use("/api", v1Router);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -134,13 +162,15 @@ app.use((req, res, next) => {
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
+  const host = process.env.HOST || "0.0.0.0";
   httpServer.listen(
     {
       port,
-      host: "localhost",
+      host,
+      reusePort: true,
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`serving on ${host}:${port}`);
     },
   );
 })();

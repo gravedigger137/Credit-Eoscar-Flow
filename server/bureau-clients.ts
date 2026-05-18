@@ -391,7 +391,7 @@ export async function pullAllBureauReports(request: BureauReportRequest): Promis
       results.push(report);
     } else {
       results.push({
-        bureau,
+        bureau: bureau === "innovis" ? "equifax" : bureau,
         score: null,
         reportId: "",
         rawData: "",

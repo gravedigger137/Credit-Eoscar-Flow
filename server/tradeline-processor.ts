@@ -1,8 +1,6 @@
 import { storage } from "./storage";
-import OpenAI from "openai";
 import { recordUsageEvent } from "./usage-metering";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { aiProvider } from "./services/ai.service";
 
 export interface TradelineMatch {
   partnerId: string;
@@ -522,17 +520,15 @@ Respond with valid JSON:
   "estimatedScoreGain": "X-Y points over Z months"
 }`;
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o",
+  const raw = await aiProvider.generate({
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 1500,
+    maxTokens: 1500,
     temperature: 0.3,
-    response_format: { type: "json_object" },
+    json: true,
   });
 
   recordUsageEvent({ eventType: "ai_analysis", clientId, metadata: { type: "tradeline_strategy" }, quantity: 1 }).catch(() => {});
 
-  const raw = resp.choices[0].message.content ?? "{}";
   try {
     return JSON.parse(raw);
   } catch {

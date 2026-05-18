@@ -1,6 +1,4 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { aiProvider } from "./services/ai.service";
 
 // ── Dispute Letter Generator ────────────────────────────────────────────────
 export async function generateDisputeLetter(params: {
@@ -31,13 +29,11 @@ The letter must:
 
 Write only the letter body, no commentary.`;
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o",
+  return aiProvider.generate({
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 1200,
+    maxTokens: 1200,
     temperature: 0.4,
   });
-  return resp.choices[0].message.content ?? "";
 }
 
 // ── Credit Report Analysis ──────────────────────────────────────────────────
@@ -70,17 +66,15 @@ Provide:
 
 Be specific, data-driven, and actionable. Format with clear headers.`;
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o",
+  return aiProvider.generate({
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 1400,
+    maxTokens: 1400,
     temperature: 0.3,
   });
-  return resp.choices[0].message.content ?? "";
 }
 
 // ── AI Chat Assistant ───────────────────────────────────────────────────────
-export async function chatWithAI(messages: { role: "user" | "assistant"; content: string }[]) {
+export async function chatWithAI(messages: string | { role: "user" | "assistant"; content: string }[]) {
   const systemPrompt = `You are an expert AI assistant for CreditRepair Pro, a professional credit repair business platform. You have deep knowledge of:
 - FCRA, FDCPA, CROA compliance and consumer rights
 - e-OSCAR dispute process and Metro 2 data furnishing
@@ -93,16 +87,14 @@ export async function chatWithAI(messages: { role: "user" | "assistant"; content
 
 Answer questions concisely and professionally. When relevant, cite specific laws or bureau codes. Help staff optimize their credit repair workflows.`;
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o",
+  return aiProvider.generate({
     messages: [
       { role: "system", content: systemPrompt },
-      ...messages,
+      ...(typeof messages === "string" ? [{ role: "user" as const, content: messages }] : messages),
     ],
-    max_tokens: 800,
+    maxTokens: 800,
     temperature: 0.5,
   });
-  return resp.choices[0].message.content ?? "";
 }
 
 // ── Bot ChatGPT Integration ──────────────────────────────────────────────────
@@ -116,18 +108,15 @@ export async function botChatWithAI(params: {
 
   const contextStr = contextData ? `\n\nContext Data:\n${JSON.stringify(contextData, null, 2)}` : "";
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o",
+  const raw = await aiProvider.generate({
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: `${taskDescription}${contextStr}\n\nRespond with a JSON object containing:\n- "analysis": a brief summary of your findings\n- "recommendations": an array of recommended actions\n- "actionsTaken": an array of actions you performed\n- "status": "success" or "needs_attention"` },
     ],
-    max_tokens: 1200,
+    maxTokens: 1200,
     temperature: 0.3,
-    response_format: { type: "json_object" },
+    json: true,
   });
-
-  const raw = resp.choices[0].message.content ?? "{}";
   try {
     const parsed = JSON.parse(raw);
     return {
@@ -268,15 +257,12 @@ RULES:
 - Prioritize items with highest score impact first
 - For e-OSCAR filing, include the ACDV reason code approach in strategy`;
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o",
+  const raw = await aiProvider.generate({
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 3000,
+    maxTokens: 3000,
     temperature: 0.2,
-    response_format: { type: "json_object" },
+    json: true,
   });
-
-  const raw = resp.choices[0].message.content ?? "{}";
   let parsed: any;
   try {
     parsed = JSON.parse(raw);
@@ -334,11 +320,9 @@ Check for:
 
 Respond with: VALID or ISSUES FOUND, then a bulleted list of findings.`;
 
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o",
+  return aiProvider.generate({
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 600,
+    maxTokens: 600,
     temperature: 0.1,
   });
-  return resp.choices[0].message.content ?? "";
 }

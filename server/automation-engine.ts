@@ -1025,10 +1025,11 @@ async function runBureauAutoPull(rule: AutomationRule): Promise<WorkflowResult> 
         if (br.success) {
           await storage.createReport({
             clientId: client.id,
-            bureau: br.bureau,
-            reportData: br.rawData,
-            score: br.score,
-            negativeItems: [],
+            equifaxScore: br.bureau === "equifax" ? br.score : undefined,
+            experianScore: br.bureau === "experian" ? br.score : undefined,
+            transunionScore: br.bureau === "transunion" ? br.score : undefined,
+            rawData: br.rawData,
+            negativeItems: 0,
           });
 
           if (br.score) {
@@ -1229,7 +1230,14 @@ async function runFullPipeline(rule: AutomationRule): Promise<WorkflowResult> {
       clientResult.steps.bureauPull = { pulled: successfulPulls.length, total: bureauResults.length };
 
       for (const br of successfulPulls) {
-        await storage.createReport({ clientId: client.id, bureau: br.bureau, reportData: br.rawData, score: br.score, negativeItems: [] });
+        await storage.createReport({
+          clientId: client.id,
+          equifaxScore: br.bureau === "equifax" ? br.score : undefined,
+          experianScore: br.bureau === "experian" ? br.score : undefined,
+          transunionScore: br.bureau === "transunion" ? br.score : undefined,
+          rawData: br.rawData,
+          negativeItems: 0,
+        });
         if (br.score) {
           const update: any = {};
           if (br.bureau === "equifax") update.equifaxScore = br.score;

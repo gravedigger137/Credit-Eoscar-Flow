@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Router, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import multer from "multer";
@@ -59,6 +59,7 @@ import { createLinkToken, exchangePublicToken, getAccounts, getTransactions, get
 import { db } from "./db";
 import { sql, eq } from "drizzle-orm";
 import { onboardingSteps, bankAccounts, cryptoWallets, loanApplications, uiCustomization } from "@shared/schema";
+import { getPublicAppUrl } from "./config";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -105,12 +106,12 @@ function getRouteParam(param: string | string[] | undefined): string {
   return Array.isArray(param) ? param[0] : param || "";
 }
 
-export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+export async function registerRoutes(httpServer: Server, app: Router): Promise<Server> {
 
   await ensureCreditSalesTable();
 
   // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) + AUTO-ONBOARDING ──────────────
-  app.post("/api/book-consultation", async (req, res) => {
+  app.post("/book-consultation", async (req, res) => {
     try {
       const { name, phone, email } = req.body;
       if (!name || !phone) return res.status(400).json({ message: "Name and phone are required" });
@@ -134,7 +135,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── DASHBOARD ─────────────────────────────────────────────────────────────
-  app.get("/api/dashboard/stats", async (_req, res) => {
+  app.get("/dashboard/stats", async (_req, res) => {
     try {
       const stats = await storage.getDashboardStats();
       res.json(stats);
@@ -142,14 +143,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── CLIENTS ───────────────────────────────────────────────────────────────
-  app.get("/api/clients", async (_req, res) => {
+  app.get("/clients", async (_req, res) => {
     try {
       const data = await storage.getClients();
       res.json(data);
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/clients/:id", async (req, res) => {
+  app.get("/clients/:id", async (req, res) => {
     try {
       const client = await storage.getClient(req.params.id);
       if (!client) return res.status(404).json({ message: "Client not found" });
@@ -157,7 +158,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/clients", async (req, res) => {
+  app.post("/clients", async (req, res) => {
     try {
       const parsed = insertClientSchema.parse(req.body);
       const client = await storage.createClient(parsed);
@@ -174,14 +175,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.patch("/api/clients/:id", async (req, res) => {
+  app.patch("/clients/:id", async (req, res) => {
     try {
       const client = await storage.updateClient(req.params.id, req.body);
       res.json(client);
     } catch (err) { handleError(res, err); }
   });
 
-  app.delete("/api/clients/:id", async (req, res) => {
+  app.delete("/clients/:id", async (req, res) => {
     try {
       await storage.deleteClient(req.params.id);
       res.json({ success: true });
@@ -189,19 +190,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── DISPUTES ──────────────────────────────────────────────────────────────
-  app.get("/api/disputes", async (_req, res) => {
+  app.get("/disputes", async (_req, res) => {
     try {
       res.json(await storage.getDisputes());
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/disputes/client/:clientId", async (req, res) => {
+  app.get("/disputes/client/:clientId", async (req, res) => {
     try {
       res.json(await storage.getDisputesByClient(req.params.clientId));
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/disputes", async (req, res) => {
+  app.post("/disputes", async (req, res) => {
     try {
       const parsed = insertDisputeSchema.parse(req.body);
       const dispute = await storage.createDispute(parsed);
@@ -220,7 +221,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.patch("/api/disputes/:id", async (req, res) => {
+  app.patch("/disputes/:id", async (req, res) => {
     try {
       const updated = await storage.updateDispute(req.params.id, req.body);
       if (req.body.status === "deleted") {
@@ -236,18 +237,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.delete("/api/disputes/:id", async (req, res) => {
+  app.delete("/disputes/:id", async (req, res) => {
     try {
       await storage.deleteDispute(req.params.id);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/dispute-reasons", (_req, res) => {
+  app.get("/dispute-reasons", (_req, res) => {
     res.json(DISPUTE_REASONS);
   });
 
-  app.post("/api/disputes/:id/generate-letter", async (req, res) => {
+  app.post("/disputes/:id/generate-letter", async (req, res) => {
     try {
       const dispute = await storage.getDispute(req.params.id);
       if (!dispute) return res.status(404).json({ message: "Dispute not found" });
@@ -279,7 +280,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/disputes/generate-letter-preview", async (req, res) => {
+  app.post("/disputes/generate-letter-preview", async (req, res) => {
     try {
       const { clientId, bureau, accountName, accountNumber, reason, disputeType } = req.body;
       if (!clientId || !bureau || !accountName || !reason) {
@@ -306,19 +307,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── CREDIT REPORTS ────────────────────────────────────────────────────────
-  app.get("/api/reports", async (_req, res) => {
+  app.get("/reports", async (_req, res) => {
     try {
       res.json(await storage.getCreditReports());
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/reports/client/:clientId", async (req, res) => {
+  app.get("/reports/client/:clientId", async (req, res) => {
     try {
       res.json(await storage.getCreditReportsByClient(req.params.clientId));
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/reports", async (req, res) => {
+  app.post("/reports", async (req, res) => {
     try {
       const parsed = insertCreditReportSchema.parse(req.body);
       const report = await storage.createCreditReport(parsed);
@@ -326,13 +327,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.patch("/api/reports/:id", async (req, res) => {
+  app.patch("/reports/:id", async (req, res) => {
     try {
       res.json(await storage.updateCreditReport(req.params.id, req.body));
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/reports/pull", async (req, res) => {
+  app.post("/reports/pull", async (req, res) => {
     try {
       const { clientId, equifaxScore, experianScore, transunionScore, negativeItems, negativeItemsList, runAnalysis } = req.body;
       if (!clientId) return res.status(400).json({ message: "Client ID required" });
@@ -391,7 +392,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/reports/:id/analyze", async (req, res) => {
+  app.post("/reports/:id/analyze", async (req, res) => {
     try {
       const reports = await storage.getCreditReports();
       const report = reports.find((r: any) => r.id === req.params.id);
@@ -418,19 +419,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── TRADELINES ────────────────────────────────────────────────────────────
-  app.get("/api/tradelines", async (_req, res) => {
+  app.get("/tradelines", async (_req, res) => {
     try {
       res.json(await storage.getTradelines());
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/tradelines/client/:clientId", async (req, res) => {
+  app.get("/tradelines/client/:clientId", async (req, res) => {
     try {
       res.json(await storage.getTradelinesByClient(req.params.clientId));
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/tradelines", async (req, res) => {
+  app.post("/tradelines", async (req, res) => {
     try {
       const parsed = insertTradelineSchema.parse(req.body);
       const tl = await storage.createTradeline(parsed);
@@ -446,13 +447,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.patch("/api/tradelines/:id", async (req, res) => {
+  app.patch("/tradelines/:id", async (req, res) => {
     try {
       res.json(await storage.updateTradeline(req.params.id, req.body));
     } catch (err) { handleError(res, err); }
   });
 
-  app.delete("/api/tradelines/:id", async (req, res) => {
+  app.delete("/tradelines/:id", async (req, res) => {
     try {
       await storage.deleteTradeline(req.params.id);
       res.json({ success: true });
@@ -460,7 +461,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── TRADELINE AI PROCESSOR ──────────────────────────────────────────────
-  app.get("/api/tradelines/optimize/:clientId", async (req, res) => {
+  app.get("/tradelines/optimize/:clientId", async (req, res) => {
     try {
       const plan = await optimizeTradelinesForClient(req.params.clientId);
       if (!plan) return res.status(404).json({ message: "Client not found" });
@@ -468,14 +469,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/tradelines/batch-optimize", async (_req, res) => {
+  app.post("/tradelines/batch-optimize", async (_req, res) => {
     try {
       const result = await batchOptimizeAll();
       res.json(result);
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/tradelines/behavior/:clientId", async (req, res) => {
+  app.get("/tradelines/behavior/:clientId", async (req, res) => {
     try {
       const profile = await analyzeClientBehavior(req.params.clientId);
       if (!profile) return res.status(404).json({ message: "Client not found" });
@@ -483,9 +484,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/tradelines/ai-strategy/:clientId", async (req, res) => {
+  app.post("/tradelines/ai-strategy/:clientId", async (req, res) => {
     try {
-      const client = await storage.getClient(req.params.clientId);
+      const clientId = String(req.params.clientId);
+      const client = await storage.getClient(clientId);
       if (!client) return res.status(404).json({ message: "Client not found" });
       const strategy = await aiTradelineStrategy(req.params.clientId);
       res.json(strategy);
@@ -493,19 +495,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── CREDIT LINES ──────────────────────────────────────────────────────────
-  app.get("/api/credit-lines", async (_req, res) => {
+  app.get("/credit-lines", async (_req, res) => {
     try {
       res.json(await storage.getCreditLines());
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/credit-lines/client/:clientId", async (req, res) => {
+  app.get("/credit-lines/client/:clientId", async (req, res) => {
     try {
       res.json(await storage.getCreditLinesByClient(req.params.clientId));
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/credit-lines", async (req, res) => {
+  app.post("/credit-lines", async (req, res) => {
     try {
       const parsed = insertCreditLineSchema.parse(req.body);
       const cl = await storage.createCreditLine(parsed);
@@ -513,13 +515,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.patch("/api/credit-lines/:id", async (req, res) => {
+  app.patch("/credit-lines/:id", async (req, res) => {
     try {
       res.json(await storage.updateCreditLine(req.params.id, req.body));
     } catch (err) { handleError(res, err); }
   });
 
-  app.delete("/api/credit-lines/:id", async (req, res) => {
+  app.delete("/credit-lines/:id", async (req, res) => {
     try {
       await storage.deleteCreditLine(req.params.id);
       res.json({ success: true });
@@ -527,19 +529,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── TRANSACTIONS / BILLING ─────────────────────────────────────────────────
-  app.get("/api/transactions", async (_req, res) => {
+  app.get("/transactions", async (_req, res) => {
     try {
       res.json(await storage.getTransactions());
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/transactions/client/:clientId", async (req, res) => {
+  app.get("/transactions/client/:clientId", async (req, res) => {
     try {
       res.json(await storage.getTransactionsByClient(req.params.clientId));
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/transactions", async (req, res) => {
+  app.post("/transactions", async (req, res) => {
     try {
       const parsed = insertTransactionSchema.parse(req.body);
       const txn = await storage.createTransaction(parsed);
@@ -547,14 +549,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.patch("/api/transactions/:id", async (req, res) => {
+  app.patch("/transactions/:id", async (req, res) => {
     try {
       res.json(await storage.updateTransaction(req.params.id, req.body));
     } catch (err) { handleError(res, err); }
   });
 
   // ─── STRIPE WEBHOOK ────────────────────────────────────────────────────────
-  app.post("/api/stripe/webhook", async (req, res) => {
+  app.post("/stripe/webhook", async (req, res) => {
     const stripe = getStripe();
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!stripe || !webhookSecret) {
@@ -600,7 +602,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── STRIPE CHECKOUT SESSION ────────────────────────────────────────────────
-  app.post("/api/stripe/create-checkout", async (req, res) => {
+  app.post("/stripe/create-checkout", async (req, res) => {
     const stripe = getStripe();
     if (!stripe) {
       return res.status(400).json({ message: "Add STRIPE_SECRET_KEY to your environment secrets to enable payments." });
@@ -610,8 +612,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!amount || typeof amount !== "number" || amount < 50) {
         return res.status(400).json({ message: "Amount must be at least $0.50 (50 cents) as an integer." });
       }
-      const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.headers.host || "localhost:5000";
-      const baseUrl = `https://${domain}`;
+      const baseUrl = getPublicAppUrl(req);
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -634,15 +635,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── STRIPE PAYMENT LINK (backward compat) ─────────────────────────────────
-  app.post("/api/stripe/create-payment-link", async (req, res) => {
+  app.post("/stripe/create-payment-link", async (req, res) => {
     const stripe = getStripe();
     if (!stripe) {
       return res.status(400).json({ message: "Add STRIPE_SECRET_KEY to your environment secrets to enable payments." });
     }
     try {
       const { amount, description, clientId, type } = req.body;
-      const domain = process.env.REPLIT_DOMAINS?.split(",")[0] || req.headers.host || "localhost:5000";
-      const baseUrl = `https://${domain}`;
+      const baseUrl = getPublicAppUrl(req);
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
@@ -665,34 +665,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── NOTIFICATIONS ─────────────────────────────────────────────────────────
-  app.get("/api/notifications", async (_req, res) => {
+  app.get("/notifications", async (_req, res) => {
     try {
       res.json(await storage.getNotifications());
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/notifications/unread-count", async (_req, res) => {
+  app.get("/notifications/unread-count", async (_req, res) => {
     try {
       const count = await storage.getUnreadCount();
       res.json({ count });
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/notifications", async (req, res) => {
+  app.post("/notifications", async (req, res) => {
     try {
       const parsed = insertNotificationSchema.parse(req.body);
       res.status(201).json(await storage.createNotification(parsed));
     } catch (err) { handleError(res, err); }
   });
 
-  app.patch("/api/notifications/:id/read", async (req, res) => {
+  app.patch("/notifications/:id/read", async (req, res) => {
     try {
       await storage.markNotificationRead(req.params.id);
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/notifications/mark-all-read", async (_req, res) => {
+  app.post("/notifications/mark-all-read", async (_req, res) => {
     try {
       await storage.markAllNotificationsRead();
       res.json({ success: true });
@@ -700,7 +700,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── API CONFIGS (admin only) ───────────────────────────────────────────────
-  app.get("/api/admin-overrides", async (req, res) => {
+  app.get("/admin-overrides", async (req, res) => {
     try {
       const user = await storage.getUser(req.session!.userId!);
       if (!user || user.role !== "admin") {
@@ -722,7 +722,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.get("/api/config/:key", async (req, res) => {
+  app.get("/config/:key", async (req, res) => {
     try {
       const user = await storage.getUser(req.session!.userId!);
       if (!user || user.role !== "admin") {
@@ -733,7 +733,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) { handleError(res, err); }
   });
 
-  app.post("/api/config", async (req, res) => {
+  app.post("/config", async (req, res) => {
     try {
       const user = await storage.getUser(req.session!.userId!);
       if (!user || user.role !== "admin") {
@@ -747,7 +747,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── BUREAU CONTACTS (Static) ─────────────────────────────────────────────
-  app.get("/api/bureaus", (_req, res) => {
+  app.get("/bureaus", (_req, res) => {
     res.json([
       {
         id: "equifax",
@@ -807,27 +807,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── CARDHOLDER PARTNERS ──────────────────────────────────────────────────
-  app.get("/api/partners", async (_req, res) => {
+  app.get("/partners", async (_req, res) => {
     try {
       res.json(await storage.getCardholderPartners());
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/partners", async (req, res) => {
+  app.post("/partners", async (req, res) => {
     try {
       const data = insertCardholderPartnerSchema.parse(req.body);
       res.status(201).json(await storage.createCardholderPartner(data));
     } catch (e) { handleError(res, e); }
   });
 
-  app.put("/api/partners/:id", async (req, res) => {
+  app.put("/partners/:id", async (req, res) => {
     try {
       const data = insertCardholderPartnerSchema.partial().parse(req.body);
       res.json(await storage.updateCardholderPartner(req.params.id, data));
     } catch (e) { handleError(res, e); }
   });
 
-  app.delete("/api/partners/:id", async (req, res) => {
+  app.delete("/partners/:id", async (req, res) => {
     try {
       await storage.deleteCardholderPartner(req.params.id);
       res.json({ success: true });
@@ -835,20 +835,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ── METRO 2 SUBMISSIONS ─────────────────────────────────────────────────
-  app.get("/api/metro2", async (_req, res) => {
+  app.get("/metro2", async (_req, res) => {
     try {
       res.json(await storage.getMetro2Submissions());
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/metro2/client/:clientId", async (req, res) => {
+  app.get("/metro2/client/:clientId", async (req, res) => {
     try {
       res.json(await storage.getMetro2SubmissionsByClient(req.params.clientId));
     } catch (e) { handleError(res, e); }
   });
 
   // Generate Metro 2 file from client data and record the submission
-  app.post("/api/metro2/generate", async (req, res) => {
+  app.post("/metro2/generate", async (req, res) => {
     try {
       const {
         clientId, bureau, portfolioType, accountType, accountStatus,
@@ -906,7 +906,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Log a manual file upload (user uploads to bureau portal themselves)
-  app.post("/api/metro2/upload", async (req, res) => {
+  app.post("/metro2/upload", async (req, res) => {
     try {
       const { bureau, fileName, fileContent } = req.body;
       if (!bureau) return res.status(400).json({ message: "bureau is required" });
@@ -930,7 +930,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.put("/api/metro2/:id", async (req, res) => {
+  app.put("/metro2/:id", async (req, res) => {
     try {
       res.json(await storage.updateMetro2Submission(req.params.id, req.body));
     } catch (e) { handleError(res, e); }
@@ -939,7 +939,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── AI ENDPOINTS ────────────────────────────────────────────────────────────
 
   // AI Dispute Letter Generator
-  app.post("/api/ai/dispute-letter", async (req, res) => {
+  app.post("/ai/dispute-letter", async (req, res) => {
     try {
       const { clientName, bureau, accountName, accountNumber, reason, type } = req.body;
       if (!clientName || !bureau || !accountName || !reason || !type) {
@@ -952,7 +952,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // AI Client Credit Analysis
-  app.post("/api/ai/analyze-client", async (req, res) => {
+  app.post("/ai/analyze-client", async (req, res) => {
     try {
       const { clientName, scores, negativeItems, goal } = req.body;
       if (!clientName) return res.status(400).json({ message: "clientName is required" });
@@ -963,7 +963,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // AI Chat Assistant
-  app.post("/api/ai/chat", async (req, res) => {
+  app.post("/ai/chat", async (req, res) => {
     try {
       const { messages } = req.body;
       if (!messages || !Array.isArray(messages)) return res.status(400).json({ message: "messages array required" });
@@ -974,7 +974,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // AI Metro 2 Validator
-  app.post("/api/ai/validate-metro2", async (req, res) => {
+  app.post("/ai/validate-metro2", async (req, res) => {
     try {
       const { record } = req.body;
       if (!record) return res.status(400).json({ message: "record is required" });
@@ -984,7 +984,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── METRO 2 FORMAT CONVERSION ──────────────────────────────────────────
-  app.post("/api/metro2/validate", async (req, res) => {
+  app.post("/metro2/validate", async (req, res) => {
     try {
       const { record } = req.body;
       if (!record) return res.status(400).json({ message: "record is required" });
@@ -1011,7 +1011,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/metro2/convert", upload.single("file"), async (req, res) => {
+  app.post("/metro2/convert", upload.single("file"), async (req, res) => {
     try {
       let content = "";
       let sourceFormat = req.body.sourceFormat as string || "";
@@ -1051,7 +1051,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/metro2/reference-codes", (_req, res) => {
+  app.get("/metro2/reference-codes", (_req, res) => {
     res.json({
       accountTypes: ACCOUNT_TYPES,
       accountStatuses: ACCOUNT_STATUSES,
@@ -1061,7 +1061,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── CLIENT DOCUMENT UPLOAD ─────────────────────────────────────────────
-  app.get("/api/clients/:clientId/documents", async (req, res) => {
+  app.get("/clients/:clientId/documents", async (req, res) => {
     try {
       const clientId = getRouteParam(req.params.clientId);
       const docs = await storage.getDocumentsByClient(clientId);
@@ -1069,7 +1069,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/clients/:clientId/documents", upload.single("file"), async (req, res) => {
+  app.post("/clients/:clientId/documents", upload.single("file"), async (req, res) => {
     const file = req.file;
     try {
       if (!file) return res.status(400).json({ message: "No file uploaded" });
@@ -1113,7 +1113,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/documents/:id/download", async (req, res) => {
+  app.get("/documents/:id/download", async (req, res) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
@@ -1125,7 +1125,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.delete("/api/documents/:id", async (req, res) => {
+  app.delete("/documents/:id", async (req, res) => {
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
@@ -1139,7 +1139,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── CREDIT REPORT PARSER ROUTES ──────────────────────────────────────────
 
-  app.post("/api/credit-report/parse", upload.single("file"), async (req: any, res) => {
+  app.post("/credit-report/parse", upload.single("file"), async (req: any, res) => {
     const filePath = req.file?.path;
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
@@ -1150,7 +1150,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     finally { if (filePath && fs.existsSync(filePath)) try { fs.unlinkSync(filePath); } catch {} }
   });
 
-  app.post("/api/credit-report/parse-text", async (req, res) => {
+  app.post("/credit-report/parse-text", async (req, res) => {
     try {
       const { text } = req.body;
       if (!text) return res.status(400).json({ message: "No text provided" });
@@ -1162,7 +1162,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── BUREAU API ROUTES ──────────────────────────────────────────────────────
 
-  app.post("/api/bureau/pull-report", async (req, res) => {
+  app.post("/bureau/pull-report", async (req, res) => {
     try {
       const { bureau, firstName, lastName, ssn, dob, address, city, state, zip } = req.body;
       if (!firstName || !lastName || !ssn) {
@@ -1183,7 +1183,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/bureau/status", async (_req, res) => {
+  app.get("/bureau/status", async (_req, res) => {
     try {
       const bureaus = ["equifax", "experian", "transunion"] as const;
       const status: Record<string, { configured: boolean; environment: string }> = {};
@@ -1196,7 +1196,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/bureau/configure", async (req, res) => {
+  app.post("/bureau/configure", async (req, res) => {
     try {
       const { bureau, apiKey, apiSecret, clientId, memberId, environment } = req.body;
       if (!bureau || !apiKey) return res.status(400).json({ message: "Bureau and API key required" });
@@ -1214,7 +1214,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── SCORE SIMULATOR ROUTES ─────────────────────────────────────────────────
 
-  app.post("/api/score-simulator/simulate", async (req, res) => {
+  app.post("/score-simulator/simulate", async (req, res) => {
     try {
       const { factors, actions } = req.body as { factors: ScoreFactors; actions: SimulationAction[] };
       if (!factors || !factors.currentScore) return res.status(400).json({ message: "Score factors required" });
@@ -1225,7 +1225,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/score-simulator/recommend", async (req, res) => {
+  app.post("/score-simulator/recommend", async (req, res) => {
     try {
       const factors = req.body as ScoreFactors;
       if (!factors || !factors.currentScore) return res.status(400).json({ message: "Score factors required" });
@@ -1238,7 +1238,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── CLIENT REPORT PARSE & AUTO-IMPORT ──────────────────────────────────────
 
-  app.post("/api/clients/:id/parse-report", upload.single("file"), async (req: any, res) => {
+  app.post("/clients/:id/parse-report", upload.single("file"), async (req: any, res) => {
     const filePath = req.file?.path;
     try {
       const clientId = req.params.id;
@@ -1393,7 +1393,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             clientAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ") || undefined,
             clientSSNLast4: (client as any).ssn ? (client as any).ssn.slice(-4) : undefined,
             clientDOB: (client as any).dob || undefined,
-            bureau,
+            bureau: bureau as "equifax" | "experian" | "transunion",
             accountName: item.creditorName,
             accountNumber: item.accountNumber || undefined,
             reason: `${item.disputeReason} [${item.legalBasis}]`,
@@ -1402,7 +1402,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
           await storage.createDispute({
             clientId,
-            bureau,
+            bureau: bureau as "equifax" | "experian" | "transunion",
             accountName: item.creditorName,
             accountNumber: item.accountNumber || undefined,
             reason: `${item.disputeReason} [${item.legalBasis}]`,
@@ -1433,7 +1433,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   }
 
-  app.post("/api/clients/:clientId/auto-analyze", async (req, res) => {
+  app.post("/clients/:clientId/auto-analyze", async (req, res) => {
     try {
       const clientId = getRouteParam(req.params.clientId);
       const client = await storage.getClient(clientId);
@@ -1492,7 +1492,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               clientAddress: [client.address, client.city, client.state, client.zip].filter(Boolean).join(", ") || undefined,
               clientSSNLast4: (client as any).ssn ? (client as any).ssn.slice(-4) : undefined,
               clientDOB: (client as any).dob || undefined,
-              bureau,
+              bureau: bureau as "equifax" | "experian" | "transunion",
               accountName: item.creditorName,
               accountNumber: item.accountNumber || undefined,
               reason: `${item.disputeReason} [${item.legalBasis}]`,
@@ -1501,7 +1501,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
             await storage.createDispute({
               clientId,
-              bureau,
+              bureau: bureau as "equifax" | "experian" | "transunion",
               accountName: item.creditorName,
               accountNumber: item.accountNumber || undefined,
               reason: `${item.disputeReason} [${item.legalBasis}]`,
@@ -1530,7 +1530,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── CREDIT PREDICTOR ROUTES ─────────────────────────────────────────────
 
-  app.post("/api/credit-predictor/analyze", async (req, res) => {
+  app.post("/credit-predictor/analyze", async (req, res) => {
     try {
       const input = req.body as CreditFactorInput;
       if (!input || input.totalAccounts === undefined) return res.status(400).json({ message: "Credit factor input required" });
@@ -1539,7 +1539,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/credit-predictor/default-risk", async (req, res) => {
+  app.post("/credit-predictor/default-risk", async (req, res) => {
     try {
       const input = req.body as DefaultPredictionInput;
       if (!input || input.creditLimit === undefined || input.balance === undefined) return res.status(400).json({ message: "creditLimit and balance are required" });
@@ -1551,7 +1551,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/credit-predictor/analyze-client/:id", async (req, res) => {
+  app.post("/credit-predictor/analyze-client/:id", async (req, res) => {
     try {
       const clientId = req.params.id;
       const client = await storage.getClient(clientId);
@@ -1582,7 +1582,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/credit-factors/:clientId/history", async (req, res) => {
+  app.get("/credit-factors/:clientId/history", async (req, res) => {
     try {
       const history = await getCreditFactorHistory(req.params.clientId);
       res.json(history);
@@ -1591,7 +1591,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── FINANCIAL REPORTS ROUTES ──────────────────────────────────────────────
 
-  app.get("/api/financial-reports/sales", async (req, res) => {
+  app.get("/financial-reports/sales", async (req, res) => {
     try {
       const period = (req.query.period as string) || "monthly";
       if (!["daily", "weekly", "monthly", "yearly"].includes(period)) return res.status(400).json({ message: "Invalid period" });
@@ -1600,7 +1600,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/financial-reports/client/:id", async (req, res) => {
+  app.get("/financial-reports/client/:id", async (req, res) => {
     try {
       const summary = await getClientFinancialSummary(req.params.id);
       if (!summary) return res.status(404).json({ message: "Client not found" });
@@ -1608,7 +1608,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/financial-reports/forecast", async (_req, res) => {
+  app.get("/financial-reports/forecast", async (_req, res) => {
     try {
       const forecast = await getRevenueForecasting();
       res.json(forecast);
@@ -1617,7 +1617,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── CREDIT SALES (POS) ROUTES ─────────────────────────────────────────────
 
-  app.get("/api/credit-sales", async (req, res) => {
+  app.get("/credit-sales", async (req, res) => {
     try {
       const clientId = req.query.clientId as string | undefined;
       const sales = await getCreditSales(clientId);
@@ -1625,7 +1625,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/credit-sales", async (req, res) => {
+  app.post("/credit-sales", async (req, res) => {
     try {
       const { clientId, description, amount, creditTerms, dueDate, notes } = req.body;
       if (!clientId || !description || !amount) return res.status(400).json({ message: "Client, description, and amount required" });
@@ -1634,7 +1634,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/credit-sales/:id/payment", async (req, res) => {
+  app.post("/credit-sales/:id/payment", async (req, res) => {
     try {
       const { amount } = req.body;
       if (!amount) return res.status(400).json({ message: "Payment amount required" });
@@ -1648,21 +1648,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── CREDIT MONITORING ROUTES ─────────────────────────────────────────────
 
-  app.get("/api/credit-monitor/config", async (_req, res) => {
+  app.get("/credit-monitor/config", async (_req, res) => {
     try {
       const config = await getMonitoringConfig();
       res.json(config);
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/credit-monitor/config", async (req, res) => {
+  app.post("/credit-monitor/config", async (req, res) => {
     try {
       const config = await setMonitoringConfig(req.body);
       res.json(config);
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/credit-monitor/scan", async (_req, res) => {
+  app.post("/credit-monitor/scan", async (_req, res) => {
     try {
       const alerts = await detectScoreChanges();
       const created = await createAlertsAsNotifications(alerts);
@@ -1670,14 +1670,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/credit-monitor/history/:clientId", async (req, res) => {
+  app.get("/credit-monitor/history/:clientId", async (req, res) => {
     try {
       const history = await getClientScoreHistory(req.params.clientId);
       res.json(history);
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/credit-report/parse-xml", async (req, res) => {
+  app.post("/credit-report/parse-xml", async (req, res) => {
     try {
       const { xml } = req.body;
       if (!xml) return res.status(400).json({ message: "XML content required" });
@@ -1688,7 +1688,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── USAGE METERING ROUTES ───────────────────────────────────────────────
 
-  app.get("/api/usage/summary", async (req, res) => {
+  app.get("/usage/summary", async (req, res) => {
     try {
       const startDate = req.query.startDate as string | undefined;
       const endDate = req.query.endDate as string | undefined;
@@ -1697,7 +1697,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/usage/report", async (req, res) => {
+  app.get("/usage/report", async (req, res) => {
     try {
       const period = (req.query.period as string) || "monthly";
       const report = await getUsageReport(period as any);
@@ -1705,7 +1705,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/usage/events", async (req, res) => {
+  app.get("/usage/events", async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const events = await getRecentEvents(limit);
@@ -1713,20 +1713,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/usage/client/:clientId", async (req, res) => {
+  app.get("/usage/client/:clientId", async (req, res) => {
     try {
       const events = await getClientUsage(req.params.clientId);
       res.json(events);
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/usage/pricing", async (_req, res) => {
+  app.get("/usage/pricing", async (_req, res) => {
     try {
       res.json(getPricing());
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/usage/record", async (req, res) => {
+  app.post("/usage/record", async (req, res) => {
     try {
       const { eventType, clientId, metadata, quantity } = req.body;
       if (!eventType) return res.status(400).json({ message: "eventType required" });
@@ -1737,7 +1737,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── TRUST ACCOUNTING / LEDGER ROUTES ────────────────────────────────────
 
-  app.get("/api/trust-accounts", async (_req, res) => {
+  app.get("/trust-accounts", async (_req, res) => {
     try {
       await ensureLedgerTables();
       const accounts = await getAllTrustAccounts();
@@ -1745,7 +1745,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/trust-accounts/summary", async (_req, res) => {
+  app.get("/trust-accounts/summary", async (_req, res) => {
     try {
       await ensureLedgerTables();
       const summary = await getAccountSummary();
@@ -1753,7 +1753,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/trust-accounts/reconcile", async (_req, res) => {
+  app.get("/trust-accounts/reconcile", async (_req, res) => {
     try {
       await ensureLedgerTables();
       const result = await reconcileTrustAccounts();
@@ -1761,7 +1761,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/trust-accounts/chart-of-accounts", (_req, res) => {
+  app.get("/trust-accounts/chart-of-accounts", (_req, res) => {
     res.json({
       assets: [
         { code: "1000", name: "Client Trust Account", type: "asset", subtype: "current", description: "Funds held in trust for clients" },
@@ -1792,7 +1792,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
-  app.get("/api/trust-accounts/:clientId", async (req, res) => {
+  app.get("/trust-accounts/:clientId", async (req, res) => {
     try {
       await ensureLedgerTables();
       const account = await getClientTrustAccount(req.params.clientId);
@@ -1801,7 +1801,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/trust-accounts/:clientId/balance", async (req, res) => {
+  app.get("/trust-accounts/:clientId/balance", async (req, res) => {
     try {
       await ensureLedgerTables();
       const balance = await getTrustBalance(req.params.clientId);
@@ -1809,7 +1809,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/trust-accounts/:clientId/deposit", async (req, res) => {
+  app.post("/trust-accounts/:clientId/deposit", async (req, res) => {
     try {
       await ensureLedgerTables();
       const { amount, description } = req.body;
@@ -1819,7 +1819,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/trust-accounts/:clientId/withdraw", async (req, res) => {
+  app.post("/trust-accounts/:clientId/withdraw", async (req, res) => {
     try {
       await ensureLedgerTables();
       const { amount, description, category } = req.body;
@@ -1829,7 +1829,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/ledger", async (req, res) => {
+  app.get("/ledger", async (req, res) => {
     try {
       await ensureLedgerTables();
       const accountId = req.query.accountId as string | undefined;
@@ -1839,7 +1839,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/ledger", async (req, res) => {
+  app.post("/ledger", async (req, res) => {
     try {
       await ensureLedgerTables();
       const { accountId, type, amount, description, category } = req.body;
@@ -1853,7 +1853,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── FINANCIAL CALCULATOR ROUTES ──────────────────────────────────────────
 
-  app.post("/api/calculator/loan", async (req, res) => {
+  app.post("/calculator/loan", async (req, res) => {
     try {
       const { principal, annualRate, termMonths } = req.body;
       if (!principal || annualRate === undefined || !termMonths) return res.status(400).json({ message: "principal, annualRate, termMonths required" });
@@ -1861,7 +1861,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/calculator/debt-payoff", async (req, res) => {
+  app.post("/calculator/debt-payoff", async (req, res) => {
     try {
       const { debts, extraPayment, method } = req.body;
       if (!debts || !Array.isArray(debts)) return res.status(400).json({ message: "debts array required (name, balance, rate, minPayment)" });
@@ -1869,7 +1869,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/calculator/repair-roi", async (req, res) => {
+  app.post("/calculator/repair-roi", async (req, res) => {
     try {
       const { currentScore, projectedScore, totalDebt, repairCost, loanTermMonths } = req.body;
       if (!currentScore || !projectedScore || !totalDebt) return res.status(400).json({ message: "currentScore, projectedScore, totalDebt required" });
@@ -1877,7 +1877,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/calculator/compound-interest", async (req, res) => {
+  app.post("/calculator/compound-interest", async (req, res) => {
     try {
       const { principal, annualRate, years, compoundingPerYear, periodicContribution } = req.body;
       if (principal === undefined || annualRate === undefined || !years) return res.status(400).json({ message: "principal, annualRate, years required" });
@@ -1885,7 +1885,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/calculator/dti", async (req, res) => {
+  app.post("/calculator/dti", async (req, res) => {
     try {
       const { monthlyDebtPayments, monthlyGrossIncome } = req.body;
       if (monthlyDebtPayments === undefined || !monthlyGrossIncome) return res.status(400).json({ message: "monthlyDebtPayments, monthlyGrossIncome required" });
@@ -1893,7 +1893,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/bureau/status-all", async (_req, res) => {
+  app.get("/bureau/status-all", async (_req, res) => {
     try {
       const bureaus = ["equifax", "experian", "transunion", "innovis"] as const;
       const status: Record<string, { configured: boolean; environment: string }> = {};
@@ -1909,11 +1909,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── AUTOMATION ENGINE ────────────────────────────────────────────────────
 
-  app.get("/api/automation/rules", async (_req, res) => {
+  app.get("/automation/rules", async (_req, res) => {
     try { res.json(await getAutomationRules()); } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/automation/rules/:id", async (req, res) => {
+  app.get("/automation/rules/:id", async (req, res) => {
     try {
       const rule = await getAutomationRule(req.params.id);
       if (!rule) return res.status(404).json({ message: "Rule not found" });
@@ -1921,35 +1921,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/automation/rules", async (req, res) => {
+  app.post("/automation/rules", async (req, res) => {
     try {
       const rule = await createAutomationRule(req.body);
       res.status(201).json(rule);
     } catch (e) { handleError(res, e); }
   });
 
-  app.put("/api/automation/rules/:id", async (req, res) => {
+  app.put("/automation/rules/:id", async (req, res) => {
     try {
       const rule = await updateAutomationRule(req.params.id, req.body);
       res.json(rule);
     } catch (e) { handleError(res, e); }
   });
 
-  app.patch("/api/automation/rules/:id", async (req, res) => {
+  app.patch("/automation/rules/:id", async (req, res) => {
     try {
       const rule = await updateAutomationRule(req.params.id, req.body);
       res.json(rule);
     } catch (e) { handleError(res, e); }
   });
 
-  app.delete("/api/automation/rules/:id", async (req, res) => {
+  app.delete("/automation/rules/:id", async (req, res) => {
     try {
       await deleteAutomationRule(req.params.id);
       res.json({ success: true });
     } catch (e) { handleError(res, e); }
   });
 
-  app.patch("/api/automation/rules/:id/toggle", async (req, res) => {
+  app.patch("/automation/rules/:id/toggle", async (req, res) => {
     try {
       const { enabled } = req.body;
       const rule = await toggleAutomationRule(req.params.id, enabled);
@@ -1957,40 +1957,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/automation/rules/:id/execute", async (req, res) => {
+  app.post("/automation/rules/:id/execute", async (req, res) => {
     try {
       const run = await executeAutomationRule(req.params.id);
       res.json(run);
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/automation/runs", async (req, res) => {
+  app.get("/automation/runs", async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       res.json(await getAutomationRuns(limit));
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/automation/rules/:id/runs", async (req, res) => {
+  app.get("/automation/rules/:id/runs", async (req, res) => {
     try { res.json(await getRunsForRule(req.params.id)); } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/automation/stats", async (_req, res) => {
+  app.get("/automation/stats", async (_req, res) => {
     try { res.json(await getAutomationStats()); } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/automation/workflow-types", (_req, res) => {
+  app.get("/automation/workflow-types", (_req, res) => {
     res.json(getWorkflowTypes());
   });
 
-  app.post("/api/automation/seed", async (_req, res) => {
+  app.post("/automation/seed", async (_req, res) => {
     try {
       const count = await seedDefaultRules();
       res.json({ seeded: count });
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/automation/reseed", async (req, res) => {
+  app.post("/automation/reseed", async (req, res) => {
     try {
       const user = req.user as any;
       if (!user || user.role !== "admin") return res.status(403).json({ message: "Admin access required" });
@@ -2003,7 +2003,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── SSN VERIFICATION ───────────────────────────────────────────────────────
 
-  app.post("/api/verify/ssn", async (req, res) => {
+  app.post("/verify/ssn", async (req, res) => {
     try {
       const { ssn, firstName, lastName, dob } = req.body;
       if (!ssn) return res.status(400).json({ message: "SSN is required" });
@@ -2039,7 +2039,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── SKIP TRACING ─────────────────────────────────────────────────────────
 
-  app.post("/api/skip-trace", async (req, res) => {
+  app.post("/skip-trace", async (req, res) => {
     try {
       const { firstName, lastName, email, phone, address, city, state, zip, ssn } = req.body;
       if (!firstName || !lastName) return res.status(400).json({ message: "First and last name required" });
@@ -2081,7 +2081,7 @@ Format as structured data.`;
 
   // ─── CREDIT CHECK (SOFT PULL SIMULATION) ──────────────────────────────────
 
-  app.post("/api/credit-check", async (req, res) => {
+  app.post("/credit-check", async (req, res) => {
     try {
       const { clientId, checkType } = req.body;
       if (!clientId) return res.status(400).json({ message: "clientId required" });
@@ -2134,7 +2134,7 @@ Format as structured data.`;
 
   // ─── PAPERWORK AUTOMATION WORKER ──────────────────────────────────────────
 
-  app.post("/api/paperwork/generate", async (req, res) => {
+  app.post("/paperwork/generate", async (req, res) => {
     try {
       const { clientId, documentType, customInstructions } = req.body;
       if (!clientId || !documentType) return res.status(400).json({ message: "clientId and documentType required" });
@@ -2207,7 +2207,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/paperwork/types", (_req, res) => {
+  app.get("/paperwork/types", (_req, res) => {
     res.json([
       { key: "fcra_dispute", label: "FCRA Dispute Letter", category: "disputes" },
       { key: "fdcpa_validation", label: "FDCPA Debt Validation", category: "disputes" },
@@ -2232,7 +2232,7 @@ Generate the COMPLETE document ready to print and mail. Include:
 
   // ─── AUTOMATED BUREAU PULL PER CLIENT ─────────────────────────────────────
 
-  app.post("/api/bureau/auto-pull/:clientId", async (req, res) => {
+  app.post("/bureau/auto-pull/:clientId", async (req, res) => {
     try {
       const { clientId } = req.params;
       const client = await storage.getClient(clientId);
@@ -2257,10 +2257,11 @@ Generate the COMPLETE document ready to print and mail. Include:
         if (br.success) {
           const report = await storage.createReport({
             clientId,
-            bureau: br.bureau,
-            reportData: br.rawData,
-            score: br.score,
-            negativeItems: [],
+            equifaxScore: br.bureau === "equifax" ? br.score : undefined,
+            experianScore: br.bureau === "experian" ? br.score : undefined,
+            transunionScore: br.bureau === "transunion" ? br.score : undefined,
+            rawData: br.rawData,
+            negativeItems: 0,
           });
           saved.push({ bureau: br.bureau, score: br.score, reportId: report.id });
 
@@ -2304,7 +2305,7 @@ Generate the COMPLETE document ready to print and mail. Include:
 
   // ─── METRO 2 BATCH FURNISHING ─────────────────────────────────────────────
 
-  app.post("/api/metro2/batch-furnish", async (req, res) => {
+  app.post("/metro2/batch-furnish", async (req, res) => {
     try {
       const { bureaus, companyId, companyName } = req.body;
       const targetBureaus = bureaus || ["equifax", "experian", "transunion"];
@@ -2360,7 +2361,7 @@ Generate the COMPLETE document ready to print and mail. Include:
 
   // ─── ENHANCED TRUST ACCOUNTING ROUTES ─────────────────────────────────────
 
-  app.post("/api/trust-accounts/invoice", async (req, res) => {
+  app.post("/trust-accounts/invoice", async (req, res) => {
     try {
       const { clientId, items, dueDate, notes } = req.body;
       if (!clientId || !items || !Array.isArray(items)) return res.status(400).json({ message: "clientId and items[] required" });
@@ -2399,7 +2400,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/trust-accounts/profit-loss", async (_req, res) => {
+  app.post("/trust-accounts/profit-loss", async (_req, res) => {
     try {
       const summary = await getAccountSummary();
       const accounts = await getAllTrustAccounts();
@@ -2432,7 +2433,7 @@ Generate the COMPLETE document ready to print and mail. Include:
   });
 
   // ─── ONBOARDING ENGINE ─────────────────────────────────────────────────────
-  app.get("/api/onboarding/:clientId", async (req, res) => {
+  app.get("/onboarding/:clientId", async (req, res) => {
     try {
       const steps = await db.select().from(onboardingSteps).where(eq(onboardingSteps.clientId, req.params.clientId));
       if (steps.length === 0) {
@@ -2444,7 +2445,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/onboarding/:clientId/advance", async (req, res) => {
+  app.post("/onboarding/:clientId/advance", async (req, res) => {
     try {
       const { step, data } = req.body;
       const result = await advanceOnboarding(req.params.clientId, step, data);
@@ -2452,7 +2453,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/onboarding/:clientId/auto-advance", async (req, res) => {
+  app.post("/onboarding/:clientId/auto-advance", async (req, res) => {
     try {
       const steps = await db.select().from(onboardingSteps).where(eq(onboardingSteps.clientId, req.params.clientId));
       const inProgress = steps.find(s => s.status === "in_progress");
@@ -2462,23 +2463,23 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/onboarding-steps", (_req, res) => {
+  app.get("/onboarding-steps", (_req, res) => {
     res.json(ONBOARDING_STEPS);
   });
 
   // ─── PLAID BANKING INTEGRATION ──────────────────────────────────────────────
-  app.get("/api/plaid/status", (_req, res) => {
+  app.get("/plaid/status", (_req, res) => {
     res.json({ configured: isPlaidConfigured() });
   });
 
-  app.post("/api/plaid/create-link-token", async (req, res) => {
+  app.post("/plaid/create-link-token", async (req, res) => {
     try {
       const result = await createLinkToken(req.body.clientId || "system");
       res.json(result);
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/plaid/exchange-token", async (req, res) => {
+  app.post("/plaid/exchange-token", async (req, res) => {
     try {
       const { publicToken, clientId, institutionName } = req.body;
       if (!publicToken || !clientId) return res.status(400).json({ message: "publicToken and clientId are required" });
@@ -2511,7 +2512,7 @@ Generate the COMPLETE document ready to print and mail. Include:
 
   const stripPlaidSecrets = (accts: any[]) => accts.map(({ plaidAccessToken, plaidItemId, ...rest }) => rest);
 
-  app.post("/api/bank-accounts", async (req, res) => {
+  app.post("/bank-accounts", async (req, res) => {
     try {
       const { clientId, institutionName, accountName, accountType, accountSubtype, mask, balanceCurrent, balanceAvailable, balanceLimit } = req.body;
       if (!clientId || !institutionName || !accountName || !accountType) {
@@ -2533,28 +2534,28 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.delete("/api/bank-accounts/:id", async (req, res) => {
+  app.delete("/bank-accounts/:id", async (req, res) => {
     try {
       await db.delete(bankAccounts).where(eq(bankAccounts.id, req.params.id));
       res.json({ deleted: true });
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/bank-accounts/:clientId", async (req, res) => {
+  app.get("/bank-accounts/:clientId", async (req, res) => {
     try {
       const accounts = await db.select().from(bankAccounts).where(eq(bankAccounts.clientId, req.params.clientId));
       res.json(stripPlaidSecrets(accounts));
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/bank-accounts", async (_req, res) => {
+  app.get("/bank-accounts", async (_req, res) => {
     try {
       const accounts = await db.select().from(bankAccounts);
       res.json(stripPlaidSecrets(accounts));
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/bank-accounts/:id/sync", async (req, res) => {
+  app.post("/bank-accounts/:id/sync", async (req, res) => {
     try {
       const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
       if (!acct || !acct.plaidAccessToken) return res.status(404).json({ message: "Account not found or no Plaid token" });
@@ -2573,7 +2574,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/bank-accounts/:id/transactions", async (req, res) => {
+  app.get("/bank-accounts/:id/transactions", async (req, res) => {
     try {
       const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
       if (!acct?.plaidAccessToken) return res.status(404).json({ message: "Account not found" });
@@ -2584,7 +2585,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/bank-accounts/:id/liabilities", async (req, res) => {
+  app.get("/bank-accounts/:id/liabilities", async (req, res) => {
     try {
       const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
       if (!acct?.plaidAccessToken) return res.status(404).json({ message: "Account not found" });
@@ -2594,21 +2595,21 @@ Generate the COMPLETE document ready to print and mail. Include:
   });
 
   // ─── CRYPTO WALLETS ─────────────────────────────────────────────────────────
-  app.get("/api/crypto-wallets", async (_req, res) => {
+  app.get("/crypto-wallets", async (_req, res) => {
     try {
       const wallets = await db.select().from(cryptoWallets);
       res.json(wallets);
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/crypto-wallets/:clientId", async (req, res) => {
+  app.get("/crypto-wallets/:clientId", async (req, res) => {
     try {
       const wallets = await db.select().from(cryptoWallets).where(eq(cryptoWallets.clientId, req.params.clientId));
       res.json(wallets);
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/crypto-wallets", async (req, res) => {
+  app.post("/crypto-wallets", async (req, res) => {
     try {
       const { clientId, walletAddress, walletType, chainId, label } = req.body;
       if (!walletAddress) return res.status(400).json({ message: "Wallet address required" });
@@ -2623,7 +2624,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.delete("/api/crypto-wallets/:id", async (req, res) => {
+  app.delete("/crypto-wallets/:id", async (req, res) => {
     try {
       await db.delete(cryptoWallets).where(eq(cryptoWallets.id, req.params.id));
       res.json({ deleted: true });
@@ -2631,21 +2632,21 @@ Generate the COMPLETE document ready to print and mail. Include:
   });
 
   // ─── LOAN APPLICATIONS / LENDING ────────────────────────────────────────────
-  app.get("/api/loans", async (_req, res) => {
+  app.get("/loans", async (_req, res) => {
     try {
       const loans = await db.select().from(loanApplications);
       res.json(loans);
     } catch (e) { handleError(res, e); }
   });
 
-  app.get("/api/loans/:clientId", async (req, res) => {
+  app.get("/loans/:clientId", async (req, res) => {
     try {
       const loans = await db.select().from(loanApplications).where(eq(loanApplications.clientId, req.params.clientId));
       res.json(loans);
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/loans", async (req, res) => {
+  app.post("/loans", async (req, res) => {
     try {
       const { clientId, loanType, amount, termMonths, lender } = req.body;
       if (!clientId || !loanType || !amount) return res.status(400).json({ message: "clientId, loanType, amount required" });
@@ -2681,7 +2682,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.patch("/api/loans/:id", async (req, res) => {
+  app.patch("/loans/:id", async (req, res) => {
     try {
       const [updated] = await db.update(loanApplications).set(req.body).where(eq(loanApplications.id, req.params.id)).returning();
       res.json(updated);
@@ -2689,7 +2690,7 @@ Generate the COMPLETE document ready to print and mail. Include:
   });
 
   // ─── UI CUSTOMIZATION ──────────────────────────────────────────────────────
-  app.get("/api/ui-customization", async (_req, res) => {
+  app.get("/ui-customization", async (_req, res) => {
     try {
       const rows = await db.select().from(uiCustomization);
       const config: Record<string, string> = {};
@@ -2698,7 +2699,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/api/ui-customization", async (req, res) => {
+  app.post("/ui-customization", async (req, res) => {
     try {
       const entries = Object.entries(req.body) as [string, string][];
       for (const [key, value] of entries) {
@@ -2714,7 +2715,7 @@ Generate the COMPLETE document ready to print and mail. Include:
   });
 
   // ─── LENDER DIRECTORY ───────────────────────────────────────────────────────
-  app.get("/api/lenders", (_req, res) => {
+  app.get("/lenders", (_req, res) => {
     res.json([
       { id: "1", name: "LendingClub", types: ["personal", "debt_consolidation"], minScore: 600, maxAmount: 40000, apr: "8.98-35.99%", term: "24-60 months", features: ["No prepayment penalty", "Fixed rates", "Soft pull pre-qualify"] },
       { id: "2", name: "SoFi", types: ["personal", "student_refi", "mortgage"], minScore: 680, maxAmount: 100000, apr: "8.99-25.81%", term: "24-84 months", features: ["Unemployment protection", "No fees", "Member benefits"] },

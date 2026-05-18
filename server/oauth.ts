@@ -4,9 +4,7 @@ import { Strategy as FacebookStrategy } from "passport-facebook";
 import { Strategy as GitHubStrategy } from "passport-github2";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
-
-const DOMAIN = process.env.REPLIT_DOMAINS?.split(",")[0] || "localhost:5000";
-const BASE_URL = DOMAIN.includes("localhost") ? `http://${DOMAIN}` : `https://${DOMAIN}`;
+import { getPublicAppUrl } from "./config";
 
 passport.serializeUser((user: any, done) => {
   done(null, user.id);
@@ -64,7 +62,7 @@ export function setupOAuth() {
         {
           clientID: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          callbackURL: `${BASE_URL}/api/auth/google/callback`,
+          callbackURL: `${getPublicAppUrl()}/api/auth/google/callback`,
         },
         async (_accessToken, _refreshToken, profile, done) => {
           try {
@@ -89,7 +87,7 @@ export function setupOAuth() {
         {
           clientID: process.env.FACEBOOK_APP_ID,
           clientSecret: process.env.FACEBOOK_APP_SECRET,
-          callbackURL: `${BASE_URL}/api/auth/facebook/callback`,
+          callbackURL: `${getPublicAppUrl()}/api/auth/facebook/callback`,
           profileFields: ["id", "displayName", "emails"],
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: any) => {
@@ -115,7 +113,7 @@ export function setupOAuth() {
         {
           clientID: process.env.GITHUB_CLIENT_ID,
           clientSecret: process.env.GITHUB_CLIENT_SECRET,
-          callbackURL: `${BASE_URL}/api/auth/github/callback`,
+          callbackURL: `${getPublicAppUrl()}/api/auth/github/callback`,
         },
         async (_accessToken: string, _refreshToken: string, profile: any, done: any) => {
           try {
@@ -140,9 +138,9 @@ export function registerOAuthRoutes(app: any) {
   app.use(passport.session());
 
   if (process.env.GOOGLE_CLIENT_ID) {
-    app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+    app.get("/api/v1/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
     app.get(
-      "/api/auth/google/callback",
+      "/api/v1/auth/google/callback",
       passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
       (req: any, res: any) => {
         req.session.userId = req.user.id;
@@ -152,9 +150,9 @@ export function registerOAuthRoutes(app: any) {
   }
 
   if (process.env.FACEBOOK_APP_ID) {
-    app.get("/api/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
+    app.get("/api/v1/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
     app.get(
-      "/api/auth/facebook/callback",
+      "/api/v1/auth/facebook/callback",
       passport.authenticate("facebook", { failureRedirect: "/login?error=facebook_failed" }),
       (req: any, res: any) => {
         req.session.userId = req.user.id;
@@ -164,9 +162,9 @@ export function registerOAuthRoutes(app: any) {
   }
 
   if (process.env.GITHUB_CLIENT_ID) {
-    app.get("/api/auth/github", passport.authenticate("github", { scope: ["user:email"] }));
+    app.get("/api/v1/auth/github", passport.authenticate("github", { scope: ["user:email"] }));
     app.get(
-      "/api/auth/github/callback",
+      "/api/v1/auth/github/callback",
       passport.authenticate("github", { failureRedirect: "/login?error=github_failed" }),
       (req: any, res: any) => {
         req.session.userId = req.user.id;
@@ -175,7 +173,7 @@ export function registerOAuthRoutes(app: any) {
     );
   }
 
-  app.get("/api/auth/providers", (_req: any, res: any) => {
+  app.get("/api/v1/auth/providers", (_req: any, res: any) => {
     res.json({
       google: !!process.env.GOOGLE_CLIENT_ID,
       facebook: !!process.env.FACEBOOK_APP_ID,

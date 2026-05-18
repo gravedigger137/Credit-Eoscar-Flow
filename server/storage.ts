@@ -42,7 +42,9 @@ export interface IStorage {
   // Credit Reports
   getCreditReports(): Promise<CreditReport[]>;
   getCreditReportsByClient(clientId: string): Promise<CreditReport[]>;
+  getReportsByClient(clientId: string): Promise<CreditReport[]>;
   createCreditReport(report: InsertCreditReport): Promise<CreditReport>;
+  createReport(report: InsertCreditReport): Promise<CreditReport>;
   updateCreditReport(id: string, data: Partial<InsertCreditReport>): Promise<CreditReport>;
 
   // Tradelines
@@ -167,9 +169,15 @@ export class DatabaseStorage implements IStorage {
   async getCreditReportsByClient(clientId: string) {
     return db.select().from(creditReports).where(eq(creditReports.clientId, clientId)).orderBy(desc(creditReports.pullDate));
   }
+  async getReportsByClient(clientId: string) {
+    return this.getCreditReportsByClient(clientId);
+  }
   async createCreditReport(report: InsertCreditReport) {
     const [r] = await db.insert(creditReports).values(report).returning();
     return r;
+  }
+  async createReport(report: InsertCreditReport) {
+    return this.createCreditReport(report);
   }
   async updateCreditReport(id: string, data: Partial<InsertCreditReport>) {
     const [r] = await db.update(creditReports).set(data).where(eq(creditReports.id, id)).returning();

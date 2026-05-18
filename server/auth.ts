@@ -27,7 +27,7 @@ function checkRateLimit(key: string): boolean {
   return true;
 }
 
-authRouter.post("/api/auth/register", async (req: Request, res: Response) => {
+authRouter.post("/auth/register", async (req: Request, res: Response) => {
   try {
     const { username, password, fullName, email, phone } = req.body;
     if (!username || !password) {
@@ -71,7 +71,7 @@ authRouter.post("/api/auth/register", async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
+authRouter.post("/auth/login", async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -105,14 +105,14 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post("/api/auth/logout", (req: Request, res: Response) => {
+authRouter.post("/auth/logout", (req: Request, res: Response) => {
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
     res.json({ ok: true });
   });
 });
 
-authRouter.get("/api/auth/me", async (req: Request, res: Response) => {
+authRouter.get("/auth/me", async (req: Request, res: Response) => {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Not authenticated" });
   }
@@ -126,7 +126,7 @@ authRouter.get("/api/auth/me", async (req: Request, res: Response) => {
   }
 });
 
-authRouter.get("/api/auth/has-users", async (_req: Request, res: Response) => {
+authRouter.get("/auth/has-users", async (_req: Request, res: Response) => {
   try {
     const allUsers = await storage.getUsers();
     res.json({ hasUsers: allUsers.length > 0 });

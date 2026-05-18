@@ -12,7 +12,10 @@ export type EventType =
   | "bureau_pull" | "dispute_filed" | "dispute_letter_generated"
   | "report_parsed" | "ai_chat" | "ai_letter" | "ai_analysis"
   | "score_simulation" | "credit_prediction" | "document_upload"
-  | "tradeline_placed" | "metro2_filing" | "payment_processed";
+  | "tradeline_placed" | "metro2_filing" | "payment_processed"
+  | "ssn_verification" | "skip_trace" | "credit_check"
+  | "paperwork_generated" | "metro2_generated" | "invoice_generated"
+  | "ai_worker" | "ai_bot_run";
 
 export interface UsageEvent {
   id?: string;
@@ -55,6 +58,14 @@ const DEFAULT_PRICING: Record<EventType, number> = {
   tradeline_placed: 1500,
   metro2_filing: 1000,
   payment_processed: 100,
+  ssn_verification: 0,
+  skip_trace: 0,
+  credit_check: 0,
+  paperwork_generated: 0,
+  metro2_generated: 0,
+  invoice_generated: 0,
+  ai_worker: 0,
+  ai_bot_run: 0,
 };
 
 export async function ensureUsageTables(): Promise<void> {

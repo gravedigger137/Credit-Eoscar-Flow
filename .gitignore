@@ -9,3 +9,5 @@ uploads
 vite.config.ts.*
 *.tar.gz
 .env.local
+.vercel
+.env*

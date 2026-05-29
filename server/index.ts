@@ -2,6 +2,7 @@ import 'dd-trace/init';
 import "dotenv/config";
 import crypto from "crypto";
 import express, { Router, type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
@@ -18,6 +19,16 @@ const app = express();
 const httpServer = createServer(app);
 
 app.set("trust proxy", 1);
+app.use(
+  cors({
+    origin: [
+      "https://www.infinitearcadia.com",
+      "https://infinitearcadia.com",
+      "http://localhost:5000",
+    ],
+    credentials: true,
+  })
+);
 
 declare module "http" {
   interface IncomingMessage {

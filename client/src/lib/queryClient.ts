@@ -1,7 +1,7 @@
 ﻿import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const API_BASE =
-  import.meta.env.VITE_API_BASE_URL || "https://credit-eoscar-flow.onrender.com";
+  import.meta.env.VITE_API_BASE_URL || "";
 
 function apiUrl(url: string) {
   if (url.startsWith("http")) return url;

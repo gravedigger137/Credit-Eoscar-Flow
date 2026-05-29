@@ -68,7 +68,7 @@ if (!process.env.SESSION_SECRET) {
 
 app.use(
   session({
-    store: new PgStore({ conString: process.env.DATABASE_URL, createTableIfMissing: true }),
+store: new PgStore({ conString: process.env.DATABASE_URL }),
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,

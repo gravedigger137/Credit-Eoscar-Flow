@@ -42,7 +42,7 @@ export function AppSidebar() {
       <SidebarHeader className="h-16 flex items-center px-4 border-b border-border/50">
         <div className="flex items-center gap-2 font-heading font-bold text-xl text-primary">
           <ShieldCheck className="w-6 h-6 text-primary" />
-          <span>CreditRepair Pro</span>
+          <span>Credit-Eoscar</span>
         </div>
       </SidebarHeader>
       <SidebarContent className="py-4">

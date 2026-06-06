@@ -1,6 +1,6 @@
 # Local Development Setup
 
-This guide helps you run CreditRepair Pro locally on your machine (no Replit).
+This guide helps you run Credit-Eoscar locally on your machine (no Replit).
 
 ## Prerequisites
 

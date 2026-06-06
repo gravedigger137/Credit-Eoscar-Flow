@@ -186,7 +186,7 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-3">
             <ShieldCheck className="w-8 h-8 text-blue-400" />
-            <span className="text-2xl font-bold text-white">CreditRepair <span className="text-blue-400">Pro</span></span>
+            <span className="text-2xl font-bold text-white">Credit-<span className="text-blue-400">Eoscar</span></span>
           </div>
           <p className="text-white/40 text-sm">
             {isFirstUser ? "Create your administrator account to get started" : "Staff Portal — Secure Access"}

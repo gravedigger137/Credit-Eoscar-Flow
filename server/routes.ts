@@ -64,19 +64,28 @@ import { getPublicAppUrl } from "./config";
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+const uploadMaxBytes = Number(process.env.UPLOAD_MAX_BYTES || 100 * 1024 * 1024);
+const allowedUploadExtensions = new Set([
+  ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".doc", ".docx", ".txt",
+  ".xml", ".csv", ".json", ".xlsx", ".xls", ".zip",
+]);
+
+function safeDownloadName(name: string): string {
+  return path.basename(name).replace(/[\r\n"]/g, "_");
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadsDir),
     filename: (_req, file, cb) => {
       const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, unique + path.extname(file.originalname));
+      cb(null, unique + path.extname(file.originalname).toLowerCase());
     },
   }),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: uploadMaxBytes, files: 1 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".doc", ".docx", ".txt", ".xml", ".csv", ".json", ".xlsx", ".xls", ".zip"];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) cb(null, true);
+    if (allowedUploadExtensions.has(ext)) cb(null, true);
     else cb(new Error("File type not allowed. Accepted: PDF, images, Word docs, text, XML, CSV, JSON, Excel, ZIP."));
   },
 });
@@ -1119,7 +1128,7 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
       if (!doc) return res.status(404).json({ message: "Document not found" });
       const filePath = path.join(uploadsDir, doc.fileName);
       if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found on disk" });
-      res.setHeader("Content-Disposition", `attachment; filename="${doc.originalName}"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${safeDownloadName(doc.originalName)}"`);
       res.setHeader("Content-Type", doc.mimeType);
       fs.createReadStream(filePath).pipe(res);
     } catch (e) { handleError(res, e); }

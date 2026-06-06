@@ -33,7 +33,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl">
             <ShieldCheck className="w-6 h-6 text-blue-400" />
-            <span className="text-white">CreditRepair <span className="text-blue-400">Pro</span></span>
+            <span className="text-white">Credit-<span className="text-blue-400">Eoscar</span></span>
           </div>
           <nav className="hidden md:flex items-center gap-8 text-sm text-white/70">
             <a href="#services" className="hover:text-white transition-colors">Services</a>
@@ -275,7 +275,7 @@ export default function Landing() {
             {[
               { name: "Marcus T.", score: "+148 pts", time: "63 days", quote: "I went from a 512 to a 660 in just two months. Got approved for my first car loan right after. These people are the real deal." },
               { name: "Latrice B.", score: "+112 pts", time: "45 days", quote: "Had 3 collections and 2 late payments deleted. The tradeline alone bumped me 60 points. The process was smooth and they kept me informed the whole time." },
-              { name: "David R.", score: "+89 pts", time: "30 days", quote: "Started at 580 and needed to qualify for a mortgage. Now I'm at 720 and closing on my house next month. Couldn't have done it without CreditRepair Pro." },
+              { name: "David R.", score: "+89 pts", time: "30 days", quote: "Started at 580 and needed to qualify for a mortgage. Now I'm at 720 and closing on my house next month. Couldn't have done it without Credit-Eoscar." },
             ].map((t, i) => (
               <div key={i} className="rounded-2xl border border-white/10 bg-white/[0.03] p-7">
                 <div className="flex gap-1 mb-4">
@@ -375,7 +375,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-white/30">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-blue-500" />
-            <span className="font-bold text-white/60">CreditRepair Pro LLC</span>
+            <span className="font-bold text-white/60">Credit-Eoscar by InfiniteArcadia</span>
           </div>
           <p className="text-center max-w-xl text-xs leading-relaxed">
             Results vary. Individual outcomes depend on credit history, bureau response, and market conditions. We are a credit repair organization as defined under the Credit Repair Organizations Act (CROA). You have the right to dispute inaccurate information directly with the bureaus at no charge.

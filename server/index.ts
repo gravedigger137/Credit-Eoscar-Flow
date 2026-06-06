@@ -14,18 +14,45 @@ import { aiRouter } from "./routes/ai.routes";
 import { creditRouter } from "./routes/credit.routes";
 import { setupOAuth, registerOAuthRoutes } from "./oauth";
 import { pool } from "./db";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
 
+const defaultAllowedOrigins = [
+  "https://www.infinitearcadia.com",
+  "https://infinitearcadia.com",
+  "http://localhost:5000",
+];
+
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsAllowedOrigins = allowedOrigins.length > 0 ? allowedOrigins : defaultAllowedOrigins;
+
 app.set("trust proxy", 1);
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
 app.use(
   cors({
-    origin: [
-      "https://www.infinitearcadia.com",
-      "https://infinitearcadia.com",
-      "http://localhost:5000",
-    ],
+    origin: (origin, callback) => {
+      if (!origin || corsAllowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Origin is not allowed by CORS"));
+    },
     credentials: true,
   })
 );
@@ -59,7 +86,72 @@ app.get("/ready", async (_req, res) => {
   }
 });
 
+async function getBureauStatus() {
+  const bureaus = ["equifax", "experian", "transunion", "innovis"] as const;
+  const result: Record<string, { configured: boolean; environment: string }> = {};
+
+  try {
+    for (const bureau of bureaus) {
+      const apiKey = await storage.getApiConfig(`${bureau}_api_key`);
+      const environment = await storage.getApiConfig(`${bureau}_environment`);
+      result[bureau] = {
+        configured: !!apiKey,
+        environment: environment || "sandbox",
+      };
+    }
+  } catch {
+    for (const bureau of bureaus) {
+      result[bureau] = {
+        configured: false,
+        environment: "unknown",
+      };
+    }
+  }
+
+  return result;
+}
+
+async function integrationStatus() {
+  const openAiConfigured = !!process.env.OPENAI_API_KEY;
+  const localAiConfigured = !!process.env.LOCAL_MODEL_ENDPOINT;
+  const stripeConfigured = !!process.env.STRIPE_SECRET_KEY;
+  const stripeWebhookConfigured = !!process.env.STRIPE_WEBHOOK_SECRET;
+  const plaidConfigured = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+  const oauthConfigured = !!(
+    (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) ||
+    (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) ||
+    (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET)
+  );
+
+  return {
+    ok: true,
+    service: "credit-eoscar-flow",
+    integrations: {
+      database: process.env.DATABASE_URL ? "configured" : "not_configured",
+      sessionSecret: process.env.SESSION_SECRET ? "configured" : "not_configured",
+      aiProvider: openAiConfigured || localAiConfigured ? "configured" : "not_configured",
+      stripe: stripeConfigured ? "configured" : "not_configured",
+      stripeWebhook: stripeWebhookConfigured ? "configured" : "not_configured",
+      plaid: plaidConfigured ? "configured" : "not_configured",
+      bureauCredentials: await getBureauStatus(),
+      oauth: oauthConfigured ? "configured" : "not_configured",
+    },
+  };
+}
+
+app.get("/status/integrations", async (_req, res) => {
+  res.json(await integrationStatus());
+});
+
+app.get("/api/v1/status/integrations", async (_req, res) => {
+  res.json(await integrationStatus());
+});
+
 const PgStore = connectPgSimple(session);
+
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET is required in production.");
+}
 
 const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 if (!process.env.SESSION_SECRET) {
@@ -112,6 +204,7 @@ app.use((req, res, next) => {
   setupOAuth();
   registerOAuthRoutes(app);
 
+  // This gate verifies authentication only. Product-grade RBAC still needs to be added per route group before real users.
   const authGate = (req: Request, res: Response, next: NextFunction) => {
     if (
       req.path === "/auth/login" ||

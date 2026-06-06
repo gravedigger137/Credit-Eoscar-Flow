@@ -27,6 +27,19 @@ function checkRateLimit(key: string): boolean {
   return true;
 }
 
+authRouter.use("/auth", (req: Request, res: Response, next: NextFunction) => {
+  if (req.method !== "POST" || !["/login", "/register"].includes(req.path)) {
+    return next();
+  }
+
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  if (!checkRateLimit(`auth:${req.path}:${ip}`)) {
+    return res.status(429).json({ message: "Too many auth attempts. Try again in 15 minutes." });
+  }
+
+  return next();
+});
+
 authRouter.post("/auth/register", async (req: Request, res: Response) => {
   try {
     const { username, password, fullName, email, phone } = req.body;
@@ -76,11 +89,6 @@ authRouter.post("/auth/login", async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ message: "Username and password are required" });
-    }
-
-    const ip = req.ip || req.socket.remoteAddress || "unknown";
-    if (!checkRateLimit(`login:${ip}`)) {
-      return res.status(429).json({ message: "Too many login attempts. Try again in 15 minutes." });
     }
 
     const user = await storage.getUserByUsername(username);

@@ -94,7 +94,7 @@ export default function AIPage() {
 
   // ── Chat state ──
   const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([
-    { role: "assistant", content: "Hi! I'm your CreditRepair Pro AI assistant. I can help with dispute strategies, FCRA law, Metro 2 questions, tradeline tactics, bureau procedures, and anything else credit-related. What do you need?" }
+    { role: "assistant", content: "Hi! I'm your Credit-Eoscar AI assistant. I can help with dispute strategies, FCRA law, Metro 2 questions, tradeline tactics, bureau procedures, and anything else credit-related. What do you need?" }
   ]);
   const [chatInput, setChatInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -214,7 +214,7 @@ export default function AIPage() {
             <Card className="glass-panel flex flex-col" style={{ height: "calc(100vh - 280px)", minHeight: "500px" }}>
               <CardHeader className="pb-3 border-b border-border/50">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Bot className="w-5 h-5 text-primary" /> CreditRepair Pro AI Assistant
+                  <Bot className="w-5 h-5 text-primary" /> Credit-Eoscar AI Assistant
                 </CardTitle>
                 <CardDescription className="text-xs">
                   Ask anything — FCRA law, bureau strategies, dispute tactics, Metro 2 codes, tradeline questions, and more.

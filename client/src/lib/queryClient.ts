@@ -8,6 +8,22 @@ function apiUrl(url: string) {
   return `${API_BASE}${url}`;
 }
 
+let csrfToken: string | null = null;
+
+async function getCsrfToken() {
+  if (csrfToken) return csrfToken;
+  const res = await fetch(apiUrl("/api/auth/csrf"), { credentials: "include" });
+  if (!res.ok) throw new Error("Unable to initialize request security token");
+  const data = await res.json() as { csrfToken: string };
+  csrfToken = data.csrfToken;
+  return csrfToken;
+}
+
+async function csrfHeaders(method: string): Promise<Record<string, string>> {
+  if (["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) return {};
+  return { "X-CSRF-Token": await getCsrfToken() };
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -22,13 +38,24 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(apiUrl(url), {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      ...(data ? { "Content-Type": "application/json" } : {}),
+      ...(await csrfHeaders(method)),
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
 
   await throwIfResNotOk(res);
   return res;
+}
+
+export async function csrfFetch(url: string, init: RequestInit = {}) {
+  const method = init.method || "GET";
+  const headers = new Headers(init.headers || {});
+  const csrf = await csrfHeaders(method);
+  Object.entries(csrf).forEach(([key, value]) => headers.set(key, value));
+  return fetch(apiUrl(url), { ...init, headers, credentials: "include" });
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

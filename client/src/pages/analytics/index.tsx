@@ -140,7 +140,7 @@ export default function Analytics() {
               <Card className="lg:col-span-2">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><Activity className="w-5 h-5" /> Creditworthiness Analysis</CardTitle>
-                  <CardDescription>6-factor FICO model prediction with approval odds</CardDescription>
+                  <CardDescription>Internal Credit-Eoscar readiness model for workflow prioritization only</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-3 gap-4">

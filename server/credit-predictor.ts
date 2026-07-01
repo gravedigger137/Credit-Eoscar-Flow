@@ -1,7 +1,8 @@
 /**
  * Credit Score Predictor & Credit Factor Calculator
  * Based on rishabhpahuja/Credit-Score- and francheska-guzman/credit-report patterns
- * Estimates creditworthiness without pulling credit, using 6 FICO factor weights
+ * Estimates internal Credit-Eoscar readiness without pulling credit.
+ * Output is not a FICO, VantageScore, bureau score, or consumer credit score.
  */
 
 export interface CreditFactorInput {

@@ -3,6 +3,7 @@ import { ShieldCheck, TrendingUp, FileText, CreditCard, Wallet, CheckCircle2, St
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
+import { csrfFetch } from "@/lib/queryClient";
 
 export default function Landing() {
   const [bookName, setBookName] = useState("");
@@ -15,7 +16,7 @@ export default function Landing() {
     if (!bookName || !bookPhone) return;
     setBookLoading(true);
     try {
-      await fetch("/api/book-consultation", {
+      await csrfFetch("/api/book-consultation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: bookName, phone: bookPhone, email: bookEmail }),

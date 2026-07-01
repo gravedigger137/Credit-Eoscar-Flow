@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, csrfFetch } from "@/lib/queryClient";
 import { useState } from "react";
 import { Search, Plus, Mail, Phone, AlertTriangle, UserCheck, FileText, ShieldAlert, ClipboardList, Eye, Pencil, Upload, Download, Trash2, File } from "lucide-react";
 import { useRef } from "react";
@@ -100,7 +100,7 @@ export default function Clients() {
       fd.append("file", file);
       fd.append("category", category);
       fd.append("notes", notes);
-      const r = await fetch(`/api/clients/${clientId}/documents`, { method: "POST", body: fd, credentials: "include" });
+      const r = await csrfFetch(`/api/clients/${clientId}/documents`, { method: "POST", body: fd });
       if (!r.ok) throw new Error("Upload failed");
       return r.json();
     },

@@ -1,42 +1,29 @@
 import { Router, Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
+import { db } from "./db";
+import { users } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { getBootstrapAdminEmails, getBootstrapRole, isAdminUser, sanitizeUser } from "./authorization";
+import { createOtpAuthUrl, createRecoveryCodes, createTotpSecret, consumeRecoveryCode, verifyTotp } from "./mfa-service";
+import { rateLimit } from "./rate-limit";
 
 declare module "express-session" {
   interface SessionData {
     userId: string;
+    mfaVerified?: boolean;
   }
 }
 
 export const authRouter = Router();
 
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 10;
-
-function checkRateLimit(key: string): boolean {
-  const now = Date.now();
-  const entry = loginAttempts.get(key);
-  if (!entry || now - entry.lastAttempt > RATE_LIMIT_WINDOW) {
-    loginAttempts.set(key, { count: 1, lastAttempt: now });
-    return true;
-  }
-  if (entry.count >= MAX_ATTEMPTS) return false;
-  entry.count++;
-  entry.lastAttempt = now;
-  return true;
-}
-
 authRouter.use("/auth", (req: Request, res: Response, next: NextFunction) => {
-  if (req.method !== "POST" || !["/login", "/register"].includes(req.path)) {
-    return next();
+  if (req.method === "POST" && ["/login", "/register"].includes(req.path)) {
+    return rateLimit("auth", (request) => [request.ip || "unknown", String(request.body?.username || request.body?.email || "anonymous").toLowerCase()])(req, res, next);
   }
-
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
-  if (!checkRateLimit(`auth:${req.path}:${ip}`)) {
-    return res.status(429).json({ message: "Too many auth attempts. Try again in 15 minutes." });
+  if (req.method === "POST" && req.path.startsWith("/mfa")) {
+    return rateLimit("auth", (request) => [request.session?.userId || request.ip || "unknown", "mfa"])(req, res, next);
   }
-
   return next();
 });
 
@@ -62,21 +49,22 @@ authRouter.post("/auth/register", async (req: Request, res: Response) => {
     }
 
     const hashed = await bcrypt.hash(password, 12);
-    const role = isFirstUser ? "admin" : "client";
+    const bootstrapEmails = getBootstrapAdminEmails();
+    const fallbackRole = isFirstUser && bootstrapEmails.size === 0 ? "admin" : "client";
+    const role = getBootstrapRole(email, fallbackRole);
     const user = await storage.createUser({ username, password: hashed, fullName, email, phone, role });
 
     if (isFirstUser) {
       req.session.regenerate((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
         req.session.userId = user.id;
+        req.session.mfaVerified = !user.mfaEnabled;
         req.session.save(() => {
-          const { password: _, ...safe } = user;
-          res.status(201).json(safe);
+          res.status(201).json(sanitizeUser(user));
         });
       });
     } else {
-      const { password: _, ...safe } = user;
-      res.status(201).json(safe);
+      res.status(201).json(sanitizeUser(user));
     }
   } catch (err) {
     console.error(err);
@@ -102,9 +90,9 @@ authRouter.post("/auth/login", async (req: Request, res: Response) => {
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ message: "Session error" });
       req.session.userId = user.id;
+      req.session.mfaVerified = !user.mfaEnabled;
       req.session.save(() => {
-        const { password: _, ...safe } = user;
-        res.json(safe);
+        res.json({ ...sanitizeUser(user), mfaRequired: user.mfaEnabled && isAdminUser(user) });
       });
     });
   } catch (err) {
@@ -116,8 +104,73 @@ authRouter.post("/auth/login", async (req: Request, res: Response) => {
 authRouter.post("/auth/logout", (req: Request, res: Response) => {
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
+    res.clearCookie("XSRF-TOKEN");
     res.json({ ok: true });
   });
+});
+
+authRouter.post("/auth/mfa/setup", async (req: Request, res: Response) => {
+  if (!req.session.userId) return res.status(401).json({ message: "Authentication required" });
+  try {
+    const user = await storage.getUser(req.session.userId);
+    if (!user) return res.status(401).json({ message: "Authentication required" });
+    const secret = createTotpSecret();
+    const { codes, hashes } = await createRecoveryCodes();
+    await db.update(users).set({
+      mfaTotpSecret: secret,
+      mfaRecoveryCodeHashes: hashes,
+      mfaEnabled: false,
+      mfaConfirmedAt: null,
+    }).where(eq(users.id, user.id));
+    res.json({
+      secret,
+      otpAuthUrl: createOtpAuthUrl(user.email || user.username, secret),
+      recoveryCodes: codes,
+      message: "Store recovery codes securely. They will not be shown again.",
+    });
+  } catch (err) {
+    res.status(500).json({ message: "MFA setup failed" });
+  }
+});
+
+authRouter.post("/auth/mfa/enable", async (req: Request, res: Response) => {
+  if (!req.session.userId) return res.status(401).json({ message: "Authentication required" });
+  try {
+    const user = await storage.getUser(req.session.userId);
+    const token = String(req.body?.token || "");
+    if (!user?.mfaTotpSecret) return res.status(400).json({ message: "MFA setup has not been started" });
+    if (!verifyTotp(user.mfaTotpSecret, token)) return res.status(400).json({ message: "Invalid MFA token" });
+    await db.update(users).set({ mfaEnabled: true, mfaConfirmedAt: new Date() }).where(eq(users.id, user.id));
+    req.session.mfaVerified = true;
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ message: "MFA enable failed" });
+  }
+});
+
+authRouter.post("/auth/mfa/verify", async (req: Request, res: Response) => {
+  if (!req.session.userId) return res.status(401).json({ message: "Authentication required" });
+  try {
+    const user = await storage.getUser(req.session.userId);
+    if (!user?.mfaEnabled || !user.mfaTotpSecret) return res.status(400).json({ message: "MFA is not enabled" });
+    const token = String(req.body?.token || "");
+    const recoveryCode = String(req.body?.recoveryCode || "");
+    let verified = token ? verifyTotp(user.mfaTotpSecret, token) : false;
+
+    if (!verified && recoveryCode) {
+      const remaining = await consumeRecoveryCode(recoveryCode, user.mfaRecoveryCodeHashes || []);
+      if (remaining) {
+        verified = true;
+        await db.update(users).set({ mfaRecoveryCodeHashes: remaining }).where(eq(users.id, user.id));
+      }
+    }
+
+    if (!verified) return res.status(400).json({ message: "Invalid MFA verification" });
+    req.session.mfaVerified = true;
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ message: "MFA verification failed" });
+  }
 });
 
 authRouter.get("/auth/me", async (req: Request, res: Response) => {
@@ -127,8 +180,7 @@ authRouter.get("/auth/me", async (req: Request, res: Response) => {
   try {
     const user = await storage.getUser(req.session.userId);
     if (!user) return res.status(401).json({ message: "Not authenticated" });
-    const { password: _, ...safe } = user;
-    res.json(safe);
+    res.json(sanitizeUser(user));
   } catch {
     res.status(401).json({ message: "Not authenticated" });
   }

@@ -24,7 +24,9 @@ Production DNS should not be cut over until staging smoke tests pass.
 
 - `GET /health`
 - `GET /ready`
-- `GET /status/integrations`
+- Admin login, then `GET /status/integrations`
+- Admin login, then `GET /status/infrastructure`
+- Admin login, then `GET /status/security`
 - Login/logout
 - Dashboard loads
 - Client list loads
@@ -62,3 +64,12 @@ Production DNS should not be cut over until staging smoke tests pass.
 
 Do not launch to real users until every blocker in `Production-Blockers.md` is either fixed or formally accepted with compensating controls.
 
+Security gate additions:
+
+- `BOOTSTRAP_ADMIN_EMAILS` used only for first admin creation and removed afterward.
+- `SENSITIVE_CONFIG_ENCRYPTION_KEY` configured before saving bureau or integration credentials.
+- Admin MFA enabled and tested for all admin users.
+- CSRF protection smoke-tested for JSON and multipart writes.
+- Private upload storage and malware scanning configured.
+- Distributed rate limiting configured for multi-instance production.
+- Backup restore drill completed and documented.

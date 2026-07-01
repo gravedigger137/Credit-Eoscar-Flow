@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, pgEnum, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -11,6 +11,13 @@ export const tradelineStatusEnum = pgEnum("tradeline_status", ["pending", "place
 export const creditLineStatusEnum = pgEnum("credit_line_status", ["applied", "reviewing", "approved", "active", "rejected", "closed"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["dispute", "billing", "client", "compliance", "success", "warning"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "failed", "refunded"]);
+export const documentRoomStatusEnum = pgEnum("document_room_status", ["draft", "active", "superseded", "attorney_review_required", "accountant_review_required", "approved"]);
+export const legalInstrumentTypeEnum = pgEnum("legal_instrument_type", ["promissory_note", "security_agreement", "bylaws", "shareholder_agreement", "trust_agreement", "resolution", "msa", "order_form", "privacy_policy", "terms_of_service"]);
+export const collateralAssetTypeEnum = pgEnum("collateral_asset_type", ["software", "domain", "database", "copyright", "trade_name", "contract_right", "receivable", "account", "general_intangible", "proceeds", "algorithm", "music_asset", "insurance_policy", "digital_asset"]);
+export const collateralValuationStatusEnum = pgEnum("collateral_valuation_status", ["founder_estimate", "book_value", "replacement_cost", "independent_appraisal_required", "appraised", "not_assessed"]);
+export const receivableReadinessStatusEnum = pgEnum("receivable_readiness_status", ["prospective", "contracted", "invoiced", "collectible", "paid", "disputed", "ineligible"]);
+export const facilityChecklistStatusEnum = pgEnum("facility_checklist_status", ["missing", "draft", "pending_review", "complete"]);
+export const equityBonusStatusEnum = pgEnum("equity_bonus_status", ["not_offered", "interested", "pending_review", "attorney_review_required", "board_approval_required", "approved", "issued", "declined", "voided"]);
 
 // ─── USERS (STAFF) ───────────────────────────────────────────────────────────
 export const users = pgTable("users", {
@@ -23,6 +30,10 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("staff"),
   oauthProvider: text("oauth_provider"),
   oauthProviderId: text("oauth_provider_id"),
+  mfaEnabled: boolean("mfa_enabled").notNull().default(false),
+  mfaTotpSecret: text("mfa_totp_secret"),
+  mfaRecoveryCodeHashes: jsonb("mfa_recovery_code_hashes").$type<string[]>().default(sql`'[]'::jsonb`),
+  mfaConfirmedAt: timestamp("mfa_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -314,6 +325,160 @@ export const cryptoWallets = pgTable("crypto_wallets", {
 export const insertCryptoWalletSchema = createInsertSchema(cryptoWallets).omit({ id: true, createdAt: true });
 export type InsertCryptoWallet = z.infer<typeof insertCryptoWalletSchema>;
 export type CryptoWallet = typeof cryptoWallets.$inferSelect;
+
+// ─── DUE DILIGENCE DOCUMENT ROOM ────────────────────────────────────────────
+export const documentRoomItems = pgTable("document_room_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  category: text("category").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  documentType: text("document_type").notNull(),
+  sourceFileName: text("source_file_name"),
+  storageUrlOrPath: text("storage_url_or_path"),
+  status: documentRoomStatusEnum("status").notNull().default("draft"),
+  version: text("version").notNull().default("v0.1"),
+  effectiveDate: timestamp("effective_date"),
+  expirationDate: timestamp("expiration_date"),
+  ownerUserId: varchar("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  relatedEntityType: text("related_entity_type"),
+  relatedEntityId: varchar("related_entity_id"),
+  confidentialityLevel: text("confidentiality_level").notNull().default("internal"),
+  lenderVisible: boolean("lender_visible_boolean").notNull().default(false),
+  attorneyReviewRequired: boolean("attorney_review_required").notNull().default(true),
+  accountantReviewRequired: boolean("accountant_review_required").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const legalInstruments = pgTable("legal_instruments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentType: legalInstrumentTypeEnum("instrument_type").notNull(),
+  partiesJson: jsonb("parties_json").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  principalAmount: integer("principal_amount"),
+  interestRate: text("interest_rate"),
+  startDate: timestamp("start_date"),
+  maturityDate: timestamp("maturity_date"),
+  governingLaw: text("governing_law"),
+  collateralSummary: text("collateral_summary"),
+  status: text("status").notNull().default("draft"),
+  documentRoomItemId: varchar("document_room_item_id").references(() => documentRoomItems.id, { onDelete: "set null" }),
+  attorneyReviewRequired: boolean("attorney_review_required").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const collateralAssets = pgTable("collateral_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assetType: collateralAssetTypeEnum("asset_type").notNull(),
+  assetName: text("asset_name").notNull(),
+  ownerEntity: text("owner_entity"),
+  assignedToEntity: text("assigned_to_entity"),
+  securedParty: text("secured_party"),
+  estimatedValue: integer("estimated_value"),
+  valuationMethod: text("valuation_method"),
+  valuationStatus: collateralValuationStatusEnum("valuation_status").notNull().default("not_assessed"),
+  supportingDocumentId: varchar("supporting_document_id").references(() => documentRoomItems.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  lenderVisible: boolean("lender_visible_boolean").notNull().default(false),
+  attorneyReviewRequired: boolean("attorney_review_required").notNull().default(true),
+  accountantReviewRequired: boolean("accountant_review_required").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const receivableReadinessRecords = pgTable("receivable_readiness_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").references(() => clients.id, { onDelete: "set null" }),
+  agreementId: varchar("agreement_id").references(() => documentRoomItems.id, { onDelete: "set null" }),
+  invoiceId: varchar("invoice_id"),
+  serviceStatus: text("service_status").notNull().default("not_started"),
+  serviceCompletionEvidenceId: varchar("service_completion_evidence_id").references(() => documentRoomItems.id, { onDelete: "set null" }),
+  paymentDueDate: timestamp("payment_due_date"),
+  amountDue: integer("amount_due"),
+  status: receivableReadinessStatusEnum("status").notNull().default("prospective"),
+  lenderEligible: boolean("lender_eligible_boolean").notNull().default(false),
+  ineligibilityReason: text("ineligibility_reason"),
+  manualReviewCompleted: boolean("manual_review_completed").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const facilityReadinessChecklist = pgTable("facility_readiness_checklist", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  checklistItem: text("checklist_item").notNull(),
+  category: text("category").notNull(),
+  status: facilityChecklistStatusEnum("status").notNull().default("missing"),
+  responsibleParty: text("responsible_party"),
+  documentRoomItemId: varchar("document_room_item_id").references(() => documentRoomItems.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const equityBonusRecords = pgTable("equity_bonus_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").references(() => clients.id, { onDelete: "set null" }),
+  customerName: text("customer_name"),
+  eligibilityStatus: equityBonusStatusEnum("eligibility_status").notNull().default("not_offered"),
+  agreementStatus: text("agreement_status").notNull().default("not_started"),
+  attorneyReviewStatus: text("attorney_review_status").notNull().default("required"),
+  boardApprovalStatus: text("board_approval_status").notNull().default("required"),
+  sharesProposed: integer("shares_proposed"),
+  sharesApproved: integer("shares_approved"),
+  issuanceDate: timestamp("issuance_date"),
+  certificateStatus: text("certificate_status").notNull().default("not_issued"),
+  stockLedgerReference: text("stock_ledger_reference"),
+  capTableReference: text("cap_table_reference"),
+  disclosureAccepted: boolean("disclosure_accepted").notNull().default(false),
+  taxReviewStatus: text("tax_review_status").notNull().default("required"),
+  transferRestrictionStatus: text("transfer_restriction_status").notNull().default("required"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const auditEvents = pgTable("audit_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actorUserId: varchar("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id"),
+  beforeValue: jsonb("before_value").$type<Record<string, unknown> | null>(),
+  afterValue: jsonb("after_value").$type<Record<string, unknown> | null>(),
+  relatedDocumentId: varchar("related_document_id").references(() => documentRoomItems.id, { onDelete: "set null" }),
+  reason: text("reason"),
+  highRisk: boolean("high_risk").notNull().default(false),
+  confirmationText: text("confirmation_text"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDocumentRoomItemSchema = createInsertSchema(documentRoomItems).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDocumentRoomItem = z.infer<typeof insertDocumentRoomItemSchema>;
+export type DocumentRoomItem = typeof documentRoomItems.$inferSelect;
+
+export const insertLegalInstrumentSchema = createInsertSchema(legalInstruments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertLegalInstrument = z.infer<typeof insertLegalInstrumentSchema>;
+export type LegalInstrument = typeof legalInstruments.$inferSelect;
+
+export const insertCollateralAssetSchema = createInsertSchema(collateralAssets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCollateralAsset = z.infer<typeof insertCollateralAssetSchema>;
+export type CollateralAsset = typeof collateralAssets.$inferSelect;
+
+export const insertReceivableReadinessRecordSchema = createInsertSchema(receivableReadinessRecords).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertReceivableReadinessRecord = z.infer<typeof insertReceivableReadinessRecordSchema>;
+export type ReceivableReadinessRecord = typeof receivableReadinessRecords.$inferSelect;
+
+export const insertFacilityReadinessChecklistSchema = createInsertSchema(facilityReadinessChecklist).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertFacilityReadinessChecklist = z.infer<typeof insertFacilityReadinessChecklistSchema>;
+export type FacilityReadinessChecklist = typeof facilityReadinessChecklist.$inferSelect;
+
+export const insertEquityBonusRecordSchema = createInsertSchema(equityBonusRecords).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEquityBonusRecord = z.infer<typeof insertEquityBonusRecordSchema>;
+export type EquityBonusRecord = typeof equityBonusRecords.$inferSelect;
+
+export const insertAuditEventSchema = createInsertSchema(auditEvents).omit({ id: true, createdAt: true });
+export type InsertAuditEvent = z.infer<typeof insertAuditEventSchema>;
+export type AuditEvent = typeof auditEvents.$inferSelect;
 
 // ─── LOAN APPLICATIONS ──────────────────────────────────────────────────
 export const loanApplications = pgTable("loan_applications", {

@@ -78,7 +78,7 @@ export async function chatWithAI(messages: string | { role: "user" | "assistant"
   const systemPrompt = `You are an expert AI assistant for CreditRepair Pro, a professional credit repair business platform. You have deep knowledge of:
 - FCRA, FDCPA, CROA compliance and consumer rights
 - e-OSCAR dispute process and Metro 2 data furnishing
-- Credit scoring models (FICO 8, FICO 9, VantageScore 3/4)
+- Internal Credit-Eoscar workflow scoring models only; do not represent output as FICO, VantageScore, bureau score, or consumer credit score
 - Authorized user tradeline strategies and ECOA codes
 - Bureau investigation timelines and procedures
 - Equifax, Experian, TransUnion, Innovis, ChexSystems, LexisNexis

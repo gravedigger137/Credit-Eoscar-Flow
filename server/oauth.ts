@@ -5,6 +5,7 @@ import { Strategy as GitHubStrategy } from "passport-github2";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { getPublicAppUrl } from "./config";
+import { getBootstrapAdminEmails, getBootstrapRole } from "./authorization";
 
 passport.serializeUser((user: any, done) => {
   done(null, user.id);
@@ -39,6 +40,8 @@ async function findOrCreateOAuthUser(profile: {
   }
 
   const isFirstUser = allUsers.length === 0;
+  const bootstrapEmails = getBootstrapAdminEmails();
+  const fallbackRole = isFirstUser && bootstrapEmails.size === 0 ? "admin" : "staff";
   const username = `${profile.provider}_${profile.providerId}`.slice(0, 50);
   const randomPw = await bcrypt.hash(Math.random().toString(36), 12);
 
@@ -47,7 +50,7 @@ async function findOrCreateOAuthUser(profile: {
     password: randomPw,
     fullName: profile.fullName || `${profile.provider} User`,
     email: profile.email || "",
-    role: isFirstUser ? "admin" : "staff",
+    role: getBootstrapRole(profile.email, fallbackRole),
     oauthProvider: profile.provider,
     oauthProviderId: profile.providerId,
   });

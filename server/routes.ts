@@ -4,11 +4,15 @@ import Stripe from "stripe";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { storage } from "./storage";
 import {
   insertClientSchema, insertDisputeSchema, insertCreditReportSchema,
   insertTradelineSchema, insertCreditLineSchema, insertTransactionSchema,
   insertNotificationSchema, insertCardholderPartnerSchema, insertMetro2SubmissionSchema,
+  insertDocumentRoomItemSchema, insertLegalInstrumentSchema, insertCollateralAssetSchema,
+  insertReceivableReadinessRecordSchema, insertFacilityReadinessChecklistSchema, insertEquityBonusRecordSchema,
 } from "@shared/schema";
 import {
   buildMetro2File, ACCOUNT_TYPES, ACCOUNT_STATUSES, ECOA_CODES, SPECIAL_COMMENT_CODES,
@@ -56,22 +60,130 @@ import {
 import { ZodError } from "zod";
 import { initializeOnboarding, advanceOnboarding, autoOnboardFromBooking, ONBOARDING_STEPS } from "./onboarding-engine";
 import { createLinkToken, exchangePublicToken, getAccounts, getTransactions, getLiabilities, isPlaidConfigured } from "./plaid-client";
+import {
+  createCollateralAsset,
+  createDocumentRoomItem,
+  createEquityBonusRecord,
+  createFacilityChecklistItem,
+  createLegalInstrument,
+  createReceivableReadinessRecord,
+  getDocumentRoomSummary,
+  highRiskConfirmationText,
+  listAuditEvents,
+  listCollateralAssets,
+  listDocumentRoomItems,
+  listEquityBonusRecords,
+  listFacilityChecklist,
+  listLegalInstruments,
+  listReceivableReadinessRecords,
+  updateCollateralAsset,
+  updateDocumentRoomItem,
+  updateEquityBonusRecord,
+  updateReceivableReadinessRecord,
+} from "./document-room-service";
 import { db } from "./db";
 import { sql, eq } from "drizzle-orm";
 import { onboardingSteps, bankAccounts, cryptoWallets, loanApplications, uiCustomization } from "@shared/schema";
 import { getPublicAppUrl } from "./config";
+import { decryptIfEncrypted, encryptIfSensitive, isSensitiveConfigKey, maskSecret } from "./secret-store";
+import { rateLimit } from "./rate-limit";
+import { maskLast4, safeErrorMessage } from "./security-utils";
 
-const uploadsDir = path.join(process.cwd(), "uploads");
+const execFileAsync = promisify(execFile);
+
+const uploadsDir = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-const uploadMaxBytes = Number(process.env.UPLOAD_MAX_BYTES || 100 * 1024 * 1024);
+const uploadMaxBytes = Number(process.env.UPLOAD_MAX_BYTES || 25 * 1024 * 1024);
+const allowArchiveUploads = process.env.ALLOW_ARCHIVE_UPLOADS === "true";
+const allowedMimeTypesByExtension = new Map<string, Set<string>>([
+  [".pdf", new Set(["application/pdf"])],
+  [".png", new Set(["image/png"])],
+  [".jpg", new Set(["image/jpeg"])],
+  [".jpeg", new Set(["image/jpeg"])],
+  [".gif", new Set(["image/gif"])],
+  [".webp", new Set(["image/webp"])],
+  [".doc", new Set(["application/msword"])],
+  [".docx", new Set(["application/vnd.openxmlformats-officedocument.wordprocessingml.document"])],
+  [".txt", new Set(["text/plain"])],
+  [".xml", new Set(["application/xml", "text/xml"])],
+  [".csv", new Set(["text/csv", "application/csv", "application/vnd.ms-excel"])],
+  [".json", new Set(["application/json"])],
+  [".dat", new Set(["text/plain", "application/octet-stream"])],
+  [".metro2", new Set(["text/plain", "application/octet-stream"])],
+  [".xlsx", new Set(["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"])],
+  [".xls", new Set(["application/vnd.ms-excel"])],
+]);
+if (allowArchiveUploads) {
+  allowedMimeTypesByExtension.set(".zip", new Set(["application/zip", "application/x-zip-compressed"]));
+}
 const allowedUploadExtensions = new Set([
   ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".doc", ".docx", ".txt",
-  ".xml", ".csv", ".json", ".xlsx", ".xls", ".zip",
+  ".xml", ".csv", ".json", ".dat", ".metro2", ".xlsx", ".xls", ...(allowArchiveUploads ? [".zip"] : []),
 ]);
+
+const magicBytesByExtension: Record<string, number[][]> = {
+  ".pdf": [[0x25, 0x50, 0x44, 0x46]],
+  ".png": [[0x89, 0x50, 0x4e, 0x47]],
+  ".jpg": [[0xff, 0xd8, 0xff]],
+  ".jpeg": [[0xff, 0xd8, 0xff]],
+  ".gif": [[0x47, 0x49, 0x46, 0x38]],
+  ".webp": [[0x52, 0x49, 0x46, 0x46]],
+  ".zip": [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06], [0x50, 0x4b, 0x07, 0x08]],
+  ".docx": [[0x50, 0x4b, 0x03, 0x04]],
+  ".xlsx": [[0x50, 0x4b, 0x03, 0x04]],
+};
 
 function safeDownloadName(name: string): string {
   return path.basename(name).replace(/[\r\n"]/g, "_");
+}
+
+function getStoredUploadPath(fileName: string) {
+  const resolvedPath = path.resolve(uploadsDir, fileName);
+  if (!resolvedPath.startsWith(`${uploadsDir}${path.sep}`)) {
+    throw new Error("Invalid stored file path");
+  }
+  return resolvedPath;
+}
+
+function hasAllowedMagicBytes(filePath: string, extension: string) {
+  const signatures = magicBytesByExtension[extension];
+  if (!signatures) return true;
+  const header = fs.readFileSync(filePath).subarray(0, 16);
+  return signatures.some((signature) => signature.every((byte, index) => header[index] === byte));
+}
+
+async function scanUploadedFile(filePath: string) {
+  const scannerCommand = process.env.MALWARE_SCAN_COMMAND;
+  if (!scannerCommand) {
+    return { scanned: false, clean: true, provider: process.env.MALWARE_SCAN_PROVIDER || "disabled" };
+  }
+  try {
+    await execFileAsync(scannerCommand, [filePath], { timeout: Number(process.env.MALWARE_SCAN_TIMEOUT_MS || 30000) });
+    return { scanned: true, clean: true, provider: scannerCommand };
+  } catch {
+    return { scanned: true, clean: false, provider: scannerCommand };
+  }
+}
+
+async function validateUploadedFile(file: Express.Multer.File) {
+  const extension = path.extname(file.originalname).toLowerCase();
+  if (!hasAllowedMagicBytes(file.path, extension)) {
+    try { fs.unlinkSync(file.path); } catch {}
+    throw Object.assign(new Error("File signature does not match the declared file type."), { status: 400 });
+  }
+  const scan = await scanUploadedFile(file.path);
+  if (!scan.clean) {
+    try { fs.unlinkSync(file.path); } catch {}
+    throw Object.assign(new Error("File failed malware scanning."), { status: 400 });
+  }
+  return scan;
+}
+
+async function auditDocumentAction(action: string, message: string) {
+  try {
+    await storage.createNotification({ type: "compliance", title: action, message, read: false });
+  } catch {}
 }
 
 const upload = multer({
@@ -85,8 +197,9 @@ const upload = multer({
   limits: { fileSize: uploadMaxBytes, files: 1 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedUploadExtensions.has(ext)) cb(null, true);
-    else cb(new Error("File type not allowed. Accepted: PDF, images, Word docs, text, XML, CSV, JSON, Excel, ZIP."));
+    const allowedMimeTypes = allowedMimeTypesByExtension.get(ext);
+    if (allowedUploadExtensions.has(ext) && allowedMimeTypes?.has(file.mimetype)) cb(null, true);
+    else cb(new Error("File type not allowed. Accepted: PDF, images, Word docs, text, XML, CSV, JSON, and Excel files."));
   },
 });
 
@@ -107,7 +220,10 @@ function handleError(res: Response, err: unknown) {
   if (e?.code === "invalid_api_key") {
     return res.status(401).json({ message: "Invalid OpenAI API key — check your key in Secrets", code: "invalid_key" });
   }
-  console.error(err);
+  if (typeof e?.status === "number" && e.status >= 400 && e.status < 500) {
+    return res.status(e.status).json({ message: e.message });
+  }
+  console.error(safeErrorMessage(err));
   return res.status(500).json({ message: "Internal server error" });
 }
 
@@ -115,12 +231,34 @@ function getRouteParam(param: string | string[] | undefined): string {
   return Array.isArray(param) ? param[0] : param || "";
 }
 
+function sanitizeClient(client: any) {
+  if (!client) return client;
+  return { ...client, ssn: maskLast4(client.ssn), idNumber: maskSecret(client.idNumber) };
+}
+
+function sanitizeBankAccount(account: any) {
+  if (!account) return account;
+  const { plaidAccessToken: _plaidAccessToken, ...safe } = account;
+  return safe;
+}
+
+function getActor(req: Request) {
+  return { userId: req.session?.userId || null };
+}
+
+function getConfirmable(req: Request) {
+  return {
+    reason: typeof req.body?.reason === "string" ? req.body.reason : undefined,
+    confirmationText: typeof req.body?.confirmationText === "string" ? req.body.confirmationText : undefined,
+  };
+}
+
 export async function registerRoutes(httpServer: Server, app: Router): Promise<Server> {
 
   await ensureCreditSalesTable();
 
   // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) + AUTO-ONBOARDING ──────────────
-  app.post("/book-consultation", async (req, res) => {
+  app.post("/book-consultation", rateLimit("api", (req) => [req.ip || "unknown", "book-consultation"]), async (req, res) => {
     try {
       const { name, phone, email } = req.body;
       if (!name || !phone) return res.status(400).json({ message: "Name and phone are required" });
@@ -151,11 +289,155 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
     } catch (err) { handleError(res, err); }
   });
 
+  // ─── DUE DILIGENCE DOCUMENT ROOM ──────────────────────────────────────────
+  app.get("/document-room/summary", async (_req, res) => {
+    try {
+      res.json(await getDocumentRoomSummary());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/items", async (_req, res) => {
+    try {
+      res.json(await listDocumentRoomItems());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/document-room/items", async (req, res) => {
+    try {
+      const parsed = insertDocumentRoomItemSchema.parse(req.body);
+      const item = await createDocumentRoomItem(parsed, getActor(req), getConfirmable(req));
+      res.status(201).json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/document-room/items/:id", async (req, res) => {
+    try {
+      const parsed = insertDocumentRoomItemSchema.partial().parse(req.body);
+      const item = await updateDocumentRoomItem(req.params.id, parsed, getActor(req), getConfirmable(req));
+      res.json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/legal-instruments", async (_req, res) => {
+    try {
+      res.json(await listLegalInstruments());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/document-room/legal-instruments", async (req, res) => {
+    try {
+      const parsed = insertLegalInstrumentSchema.parse(req.body);
+      const instrument = await createLegalInstrument(parsed, getActor(req), getConfirmable(req));
+      res.status(201).json(instrument);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/collateral-assets", async (_req, res) => {
+    try {
+      res.json(await listCollateralAssets());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/document-room/collateral-assets", async (req, res) => {
+    try {
+      const parsed = insertCollateralAssetSchema.parse(req.body);
+      const asset = await createCollateralAsset(parsed, getActor(req), getConfirmable(req));
+      res.status(201).json(asset);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/document-room/collateral-assets/:id", async (req, res) => {
+    try {
+      const parsed = insertCollateralAssetSchema.partial().parse(req.body);
+      const asset = await updateCollateralAsset(req.params.id, parsed, getActor(req), getConfirmable(req));
+      res.json(asset);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/receivables", async (_req, res) => {
+    try {
+      res.json(await listReceivableReadinessRecords());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/document-room/receivables", async (req, res) => {
+    try {
+      const parsed = insertReceivableReadinessRecordSchema.parse(req.body);
+      const record = await createReceivableReadinessRecord(parsed, getActor(req), getConfirmable(req));
+      res.status(201).json(record);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/document-room/receivables/:id", async (req, res) => {
+    try {
+      const parsed = insertReceivableReadinessRecordSchema.partial().parse(req.body);
+      const record = await updateReceivableReadinessRecord(req.params.id, parsed, getActor(req), getConfirmable(req));
+      res.json(record);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/facility-checklist", async (_req, res) => {
+    try {
+      res.json(await listFacilityChecklist());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/document-room/facility-checklist", async (req, res) => {
+    try {
+      const parsed = insertFacilityReadinessChecklistSchema.parse(req.body);
+      const item = await createFacilityChecklistItem(parsed, getActor(req), getConfirmable(req));
+      res.status(201).json(item);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/audit-events", async (_req, res) => {
+    try {
+      res.json(await listAuditEvents());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/equity-bonus", async (_req, res) => {
+    try {
+      res.json(await listEquityBonusRecords());
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.post("/document-room/equity-bonus", async (req, res) => {
+    try {
+      const parsed = insertEquityBonusRecordSchema.parse(req.body);
+      const record = await createEquityBonusRecord(parsed, getActor(req), getConfirmable(req));
+      res.status(201).json(record);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.patch("/document-room/equity-bonus/:id", async (req, res) => {
+    try {
+      const parsed = insertEquityBonusRecordSchema.partial().parse(req.body);
+      const record = await updateEquityBonusRecord(req.params.id, parsed, getActor(req), getConfirmable(req));
+      res.json(record);
+    } catch (err) { handleError(res, err); }
+  });
+
+  app.get("/document-room/controls", (_req, res) => {
+    res.json({
+      requiredConfirmationText: highRiskConfirmationText,
+      highRiskActions: [
+        "marking lender visible",
+        "marking receivable eligible",
+        "changing collateral value",
+        "approving legal document",
+        "superseding legal document",
+        "deleting uploaded evidence",
+      ],
+      professionalReviewRequired: ["attorney", "accountant", "compliance", "lender", "insurance", "tax"],
+    });
+  });
+
   // ─── CLIENTS ───────────────────────────────────────────────────────────────
   app.get("/clients", async (_req, res) => {
     try {
       const data = await storage.getClients();
-      res.json(data);
+      res.json(data.map(sanitizeClient));
     } catch (err) { handleError(res, err); }
   });
 
@@ -163,7 +445,7 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
     try {
       const client = await storage.getClient(req.params.id);
       if (!client) return res.status(404).json({ message: "Client not found" });
-      res.json(client);
+      res.json(sanitizeClient(client));
     } catch (err) { handleError(res, err); }
   });
 
@@ -180,14 +462,14 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
         read: false,
       });
       dispatchEvent("client_created", { clientId: client.id }).catch(() => {});
-      res.status(201).json(client);
+      res.status(201).json(sanitizeClient(client));
     } catch (err) { handleError(res, err); }
   });
 
   app.patch("/clients/:id", async (req, res) => {
     try {
       const client = await storage.updateClient(req.params.id, req.body);
-      res.json(client);
+      res.json(sanitizeClient(client));
     } catch (err) { handleError(res, err); }
   });
 
@@ -738,6 +1020,9 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
         return res.status(403).json({ message: "Admin access required" });
       }
       const val = await storage.getApiConfig(req.params.key);
+      if (isSensitiveConfigKey(req.params.key)) {
+        return res.json({ key: req.params.key, configured: !!val, value: maskSecret(val) });
+      }
       res.json({ key: req.params.key, value: val ?? null });
     } catch (err) { handleError(res, err); }
   });
@@ -1020,12 +1305,13 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/metro2/convert", upload.single("file"), async (req, res) => {
+  app.post("/metro2/convert", rateLimit("upload", (req) => [req.session?.userId || req.ip || "unknown", "metro2-convert"]), upload.single("file"), async (req, res) => {
     try {
       let content = "";
       let sourceFormat = req.body.sourceFormat as string || "";
 
       if (req.file) {
+        await validateUploadedFile(req.file);
         content = fs.readFileSync(req.file.path, "utf-8");
         fs.unlinkSync(req.file.path);
       } else if (req.body.content) {
@@ -1078,10 +1364,11 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
     } catch (e) { handleError(res, e); }
   });
 
-  app.post("/clients/:clientId/documents", upload.single("file"), async (req, res) => {
+  app.post("/clients/:clientId/documents", rateLimit("upload", (req) => [req.session?.userId || req.ip || "unknown", "client-documents"]), upload.single("file"), async (req, res) => {
     const file = req.file;
     try {
       if (!file) return res.status(400).json({ message: "No file uploaded" });
+      await validateUploadedFile(file);
       const clientId = getRouteParam(req.params.clientId);
       const client = await storage.getClient(clientId);
       if (!client) {
@@ -1108,6 +1395,7 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
           read: false,
         });
       } catch (_) {}
+      await auditDocumentAction("Document Upload Audited", `Document ${file.originalname} uploaded for client ${clientId}`);
 
       if (category === "credit_report" && /\.(pdf|xml|txt)$/i.test(file.originalname)) {
         autoAnalyzeAndDispute(clientId, file.path, file.originalname).catch((err) => {
@@ -1126,10 +1414,11 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
-      const filePath = path.join(uploadsDir, doc.fileName);
+      const filePath = getStoredUploadPath(doc.fileName);
       if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found on disk" });
       res.setHeader("Content-Disposition", `attachment; filename="${safeDownloadName(doc.originalName)}"`);
       res.setHeader("Content-Type", doc.mimeType);
+      await auditDocumentAction("Document Download Audited", `Document ${doc.id} downloaded`);
       fs.createReadStream(filePath).pipe(res);
     } catch (e) { handleError(res, e); }
   });
@@ -1138,9 +1427,10 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
-      const filePath = path.join(uploadsDir, doc.fileName);
+      const filePath = getStoredUploadPath(doc.fileName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       await storage.deleteDocument(req.params.id);
+      await auditDocumentAction("Document Delete Audited", `Document ${doc.id} deleted`);
       res.json({ success: true });
     } catch (e) { handleError(res, e); }
   });
@@ -1148,10 +1438,11 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
 
   // ─── CREDIT REPORT PARSER ROUTES ──────────────────────────────────────────
 
-  app.post("/credit-report/parse", upload.single("file"), async (req: any, res) => {
+  app.post("/credit-report/parse", rateLimit("upload", (req) => [req.session?.userId || req.ip || "unknown", "credit-report-parse"]), upload.single("file"), async (req: any, res) => {
     const filePath = req.file?.path;
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      await validateUploadedFile(req.file);
       const report = await parseCreditReportPDF(filePath!);
       recordUsageEvent({ eventType: "report_parsed", metadata: { format: "pdf" }, quantity: 1 }).catch(() => {});
       res.json(report);
@@ -1247,13 +1538,14 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
 
   // ─── CLIENT REPORT PARSE & AUTO-IMPORT ──────────────────────────────────────
 
-  app.post("/clients/:id/parse-report", upload.single("file"), async (req: any, res) => {
+  app.post("/clients/:id/parse-report", rateLimit("upload", (req) => [req.session?.userId || req.ip || "unknown", "client-report-parse"]), upload.single("file"), async (req: any, res) => {
     const filePath = req.file?.path;
     try {
       const clientId = req.params.id;
       const client = await storage.getClient(clientId);
       if (!client) return res.status(404).json({ message: "Client not found" });
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+      await validateUploadedFile(req.file);
 
       const report = await parseCreditReportPDF(filePath!);
 
@@ -2502,7 +2794,7 @@ Generate the COMPLETE document ready to print and mail. Include:
         const [ba] = await db.insert(bankAccounts).values({
           clientId,
           plaidItemId: result.itemId,
-          plaidAccessToken: result.accessToken,
+          plaidAccessToken: encryptIfSensitive("plaid_access_token", result.accessToken),
           institutionName: institutionName || "Unknown",
           accountName: acct.name,
           accountType: acct.type,
@@ -2513,13 +2805,13 @@ Generate the COMPLETE document ready to print and mail. Include:
           balanceLimit: acct.balanceLimit,
           lastSynced: new Date(),
         }).returning();
-        saved.push(ba);
+        saved.push(sanitizeBankAccount(ba));
       }
       res.json({ accounts: saved });
     } catch (e) { handleError(res, e); }
   });
 
-  const stripPlaidSecrets = (accts: any[]) => accts.map(({ plaidAccessToken, plaidItemId, ...rest }) => rest);
+  const stripPlaidSecrets = (accts: any[]) => accts.map(sanitizeBankAccount);
 
   app.post("/bank-accounts", async (req, res) => {
     try {
@@ -2539,7 +2831,7 @@ Generate the COMPLETE document ready to print and mail. Include:
         balanceLimit: balanceLimit ?? null,
         lastSynced: new Date(),
       }).returning();
-      res.json(acct);
+      res.json(sanitizeBankAccount(acct));
     } catch (e) { handleError(res, e); }
   });
 
@@ -2568,7 +2860,8 @@ Generate the COMPLETE document ready to print and mail. Include:
     try {
       const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
       if (!acct || !acct.plaidAccessToken) return res.status(404).json({ message: "Account not found or no Plaid token" });
-      const accounts = await getAccounts(acct.plaidAccessToken);
+      const accessToken = decryptIfEncrypted(acct.plaidAccessToken);
+      const accounts = await getAccounts(accessToken!);
       if ("error" in accounts) return res.status(400).json(accounts);
       const match = accounts.accounts.find((a: any) => a.mask === acct.mask);
       if (match) {
@@ -2589,7 +2882,7 @@ Generate the COMPLETE document ready to print and mail. Include:
       if (!acct?.plaidAccessToken) return res.status(404).json({ message: "Account not found" });
       const end = new Date().toISOString().split("T")[0];
       const start = new Date(Date.now() - 90 * 86400000).toISOString().split("T")[0];
-      const result = await getTransactions(acct.plaidAccessToken, start, end);
+      const result = await getTransactions(decryptIfEncrypted(acct.plaidAccessToken)!, start, end);
       res.json(result);
     } catch (e) { handleError(res, e); }
   });
@@ -2598,7 +2891,7 @@ Generate the COMPLETE document ready to print and mail. Include:
     try {
       const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.id, req.params.id));
       if (!acct?.plaidAccessToken) return res.status(404).json({ message: "Account not found" });
-      const result = await getLiabilities(acct.plaidAccessToken);
+      const result = await getLiabilities(decryptIfEncrypted(acct.plaidAccessToken)!);
       res.json(result);
     } catch (e) { handleError(res, e); }
   });

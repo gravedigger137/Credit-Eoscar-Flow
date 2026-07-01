@@ -8,6 +8,27 @@
       "when": 1779066365447,
       "tag": "0000_spicy_roughhouse",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782864000000,
+      "tag": "0001_document_room_framework",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782864000001,
+      "tag": "0002_equity_bonus_framework",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782864000002,
+      "tag": "0003_security_hardening",
+      "breakpoints": true
     }
   ]
 }

@@ -26,6 +26,7 @@ import Analytics from "@/pages/analytics";
 import Calculators from "@/pages/calculators";
 import TrustAccounting from "@/pages/trust-accounting";
 import Automation from "@/pages/automation";
+import DocumentRoom from "@/pages/document-room";
 import Tools from "@/pages/tools";
 import Banking from "@/pages/banking";
 import Crypto from "@/pages/crypto";
@@ -64,6 +65,7 @@ function Router() {
       <Route path="/calculators">{() => <ProtectedRoute component={Calculators} />}</Route>
       <Route path="/trust-accounting">{() => <ProtectedRoute component={TrustAccounting} />}</Route>
       <Route path="/automation">{() => <ProtectedRoute component={Automation} />}</Route>
+      <Route path="/document-room">{() => <ProtectedRoute component={DocumentRoom} />}</Route>
       <Route path="/tools">{() => <ProtectedRoute component={Tools} />}</Route>
       <Route path="/banking">{() => <ProtectedRoute component={Banking} />}</Route>
       <Route path="/crypto">{() => <ProtectedRoute component={Crypto} />}</Route>

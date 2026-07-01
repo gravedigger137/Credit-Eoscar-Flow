@@ -11,10 +11,20 @@ export interface AIProvider {
 }
 
 export class OpenAIProvider implements AIProvider {
-  private readonly client: OpenAI;
+  private client: OpenAI | null = null;
 
-  constructor(apiKey = process.env.OPENAI_API_KEY) {
-    this.client = new OpenAI({ apiKey });
+  constructor(private readonly apiKey = process.env.OPENAI_API_KEY) {}
+
+  private getClient() {
+    if (!this.apiKey) {
+      throw new Error("OPENAI_API_KEY is required to use OpenAI AI features.");
+    }
+
+    if (!this.client) {
+      this.client = new OpenAI({ apiKey: this.apiKey });
+    }
+
+    return this.client;
   }
 
   async generate(input: {
@@ -24,7 +34,7 @@ export class OpenAIProvider implements AIProvider {
     temperature?: number;
     json?: boolean;
   }) {
-    const resp = await this.client.chat.completions.create({
+    const resp = await this.getClient().chat.completions.create({
       model: input.model || process.env.AI_MODEL || "gpt-4o",
       messages: input.messages,
       max_tokens: input.maxTokens,
@@ -51,6 +61,20 @@ export function createAIProvider(): AIProvider {
   const provider = process.env.AI_PROVIDER || "openai";
   if (provider === "local") return new LocalModelProvider();
   return new OpenAIProvider();
+}
+
+export function getAIProviderStatus() {
+  const provider = process.env.AI_PROVIDER || "openai";
+  const openAiConfigured = !!process.env.OPENAI_API_KEY;
+  const localConfigured = !!process.env.LOCAL_MODEL_ENDPOINT;
+
+  return {
+    provider,
+    configured: provider === "local" ? localConfigured : openAiConfigured,
+    status: provider === "local"
+      ? localConfigured ? "configured" : "missing_local_model_endpoint"
+      : openAiConfigured ? "configured" : "missing_openai_api_key",
+  };
 }
 
 export const aiProvider = createAIProvider();

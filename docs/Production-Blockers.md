@@ -15,11 +15,14 @@ The ecosystem is suitable for staging with test data when:
 
 Credit-Eoscar is not ready for real credit repair customers until:
 
-- CSRF protection is added for cookie/session writes.
-- RBAC is enforced per route group.
-- Bureau credentials are moved out of plaintext app config storage or encrypted.
-- Upload storage is moved to private object storage with malware scanning.
+- Admin MFA is enabled, tested, and required for every admin account.
+- Non-admin data access is reviewed for tenant/client-level scoping where needed.
+- Existing bureau credentials saved before `SENSITIVE_CONFIG_ENCRYPTION_KEY` was configured are rotated or re-entered so they are encrypted at rest.
+- Upload storage is moved to private object storage with malware scanning enabled and tested.
 - Raw credit reports and PII have access controls, retention, and audit policies.
+- Distributed rate limiting replaces the in-memory limiter for multi-instance production.
+- Password reset is implemented through a verified email/identity provider or formally disabled with an admin recovery runbook.
+- Backup restore drill is completed and documented.
 
 BrandonFintech is not ready for real users until:
 
@@ -53,4 +56,3 @@ BrandonFintech is not ready for real users until:
 
 - Do not implement Treasury, cards, ACH, Connect payouts, or KYC/KYB until compliance and Stripe eligibility are confirmed.
 - Business onboarding, KYB, risk checks, support workflows, and financial account architecture must be documented and approved first.
-

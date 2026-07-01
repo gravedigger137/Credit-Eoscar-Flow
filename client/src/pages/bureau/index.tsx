@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, csrfFetch } from "@/lib/queryClient";
 import { useState, useRef } from "react";
 import {
   FileUp, Shield, Zap, TrendingUp, AlertTriangle, CheckCircle2, XCircle,
@@ -100,7 +100,7 @@ export default function Bureau() {
     mutationFn: async (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
-      const r = await fetch("/api/credit-report/parse", { method: "POST", body: fd, credentials: "include" });
+      const r = await csrfFetch("/api/credit-report/parse", { method: "POST", body: fd });
       if (!r.ok) throw new Error((await r.json()).message || "Parse failed");
       return r.json();
     },

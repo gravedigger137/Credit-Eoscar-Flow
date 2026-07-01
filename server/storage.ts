@@ -16,6 +16,17 @@ import {
   type Metro2Submission, type InsertMetro2Submission,
   type ClientDocument, type InsertClientDocument,
 } from "@shared/schema";
+import { decryptIfEncrypted, encryptIfSensitive } from "./secret-store";
+
+function decryptClient<T extends { ssn?: string | null }>(client: T): T {
+  if (!client?.ssn) return client;
+  return { ...client, ssn: decryptIfEncrypted(client.ssn) || null };
+}
+
+function encryptClientInput<T extends { ssn?: string | null }>(client: T): T {
+  if (!client?.ssn) return client;
+  return { ...client, ssn: encryptIfSensitive("client_ssn", client.ssn) };
+}
 
 export interface IStorage {
   // Users
@@ -121,19 +132,20 @@ export class DatabaseStorage implements IStorage {
 
   // Clients
   async getClients() {
-    return db.select().from(clients).orderBy(desc(clients.createdAt));
+    const rows = await db.select().from(clients).orderBy(desc(clients.createdAt));
+    return rows.map(decryptClient);
   }
   async getClient(id: string) {
     const [c] = await db.select().from(clients).where(eq(clients.id, id));
-    return c;
+    return c ? decryptClient(c) : c;
   }
   async createClient(client: InsertClient) {
-    const [c] = await db.insert(clients).values(client).returning();
-    return c;
+    const [c] = await db.insert(clients).values(encryptClientInput(client)).returning();
+    return decryptClient(c);
   }
   async updateClient(id: string, data: Partial<InsertClient>) {
-    const [c] = await db.update(clients).set(data).where(eq(clients.id, id)).returning();
-    return c;
+    const [c] = await db.update(clients).set(encryptClientInput(data)).where(eq(clients.id, id)).returning();
+    return decryptClient(c);
   }
   async deleteClient(id: string) {
     await db.delete(clients).where(eq(clients.id, id));
@@ -296,10 +308,11 @@ export class DatabaseStorage implements IStorage {
   // API Config
   async getApiConfig(key: string) {
     const [c] = await db.select().from(apiConfigs).where(eq(apiConfigs.key, key));
-    return c?.value;
+    return decryptIfEncrypted(c?.value);
   }
   async setApiConfig(key: string, value: string) {
-    await db.insert(apiConfigs).values({ key, value }).onConflictDoUpdate({ target: apiConfigs.key, set: { value, updatedAt: new Date() } });
+    const storedValue = encryptIfSensitive(key, value);
+    await db.insert(apiConfigs).values({ key, value: storedValue }).onConflictDoUpdate({ target: apiConfigs.key, set: { value: storedValue, updatedAt: new Date() } });
   }
 
   // Client Documents

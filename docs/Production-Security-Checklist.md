@@ -12,11 +12,11 @@
 
 ## CSRF
 
-Credit-Eoscar uses cookie/session authentication, so production needs CSRF protection for state-changing routes.
+Credit-Eoscar uses cookie/session authentication. CSRF protection is implemented for state-changing browser routes.
 
 Required:
 
-- CSRF tokens or same-site plus origin verification
+- Keep CSRF tokens enabled.
 - Strict allowed origins
 - No state-changing GET endpoints
 - Separate public webhook routes from browser-auth routes
@@ -37,7 +37,7 @@ Required:
 
 ## Admin MFA
 
-All admin roles need MFA before real users:
+MFA readiness is implemented. All admin roles need MFA enabled and tested before real users:
 
 - Credit-Eoscar admin and staff roles
 - BrandonFintech admin role
@@ -45,10 +45,16 @@ All admin roles need MFA before real users:
 - Ledger/payment admin operations
 - Bureau credential management
 
+## RBAC
+
+- Centralized admin RBAC is implemented through `server/authorization.ts`.
+- Admin-only route families include Document Room, Asset Register, Equity, admin overrides, configuration, automation controls, bureau credential configuration, monitoring configuration, UI customization, integration status, infrastructure status, agent status, and automation status.
+- Real-user production still requires admin MFA and periodic role review.
+
 ## Rate Limiting and Login Lockout
 
-- Keep login rate limits.
-- Add distributed rate limiting for production.
+- Keep login, API, upload, and admin rate limits enabled.
+- Add Redis or platform distributed rate limiting for multi-instance production.
 - Add IP and account-based lockout.
 - Add webhook rate and payload limits.
 - Add AI endpoint limits.
@@ -73,15 +79,19 @@ Audit:
 - Use platform secrets only.
 - Rotate secrets before launch.
 - Do not log secret values.
-- Do not store bureau credentials in plaintext application tables.
-- Prefer managed secret storage or encrypted columns with envelope encryption.
+- Sensitive app config values are encrypted at rest when `SENSITIVE_CONFIG_ENCRYPTION_KEY` is configured.
+- Production refuses to save sensitive app config values without `SENSITIVE_CONFIG_ENCRYPTION_KEY`.
+- Sensitive `/config/:key` reads return masked values.
+- Prefer managed secret storage or encrypted columns with envelope encryption for any future credential tables.
 
 ## Upload Security
 
 - Store uploads outside source control.
-- Use antivirus/malware scanning.
+- Use antivirus/malware scanning through `MALWARE_SCAN_COMMAND` or provider integration.
 - Enforce MIME and extension validation.
+- Enforce magic-byte validation where practical.
 - Enforce size limits.
+- Archive uploads are disabled by default and require `ALLOW_ARCHIVE_UPLOADS=true`.
 - Use private object storage for production.
 - Audit all downloads.
 - Remove any tracked PDFs before public deployment if they contain PII.

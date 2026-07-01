@@ -1,7 +1,7 @@
 /**
  * Credit Score Simulator
- * Estimates FICO score impact of credit actions
- * Based on publicly documented FICO scoring factor weights
+ * Estimates internal Credit-Eoscar workflow impact of credit actions.
+ * Output is not a FICO, VantageScore, bureau score, or consumer credit score.
  */
 
 export interface ScoreFactors {
@@ -152,7 +152,7 @@ export function simulateScoreChanges(
         else if (currentLate60 > 0) { impact = 15 + Math.round(Math.random() * 10); currentLate60--; }
         else { impact = 10 + Math.round(Math.random() * 8); currentLate30--; }
         actionLabel = "Remove Late Payment";
-        explanation = "Late payments account for 35% of FICO score. Each removal improves payment history.";
+        explanation = "Late payments are a major internal readiness factor. Each removal may improve the platform workflow score.";
         timeframe = "30-45 days";
         difficulty = "Moderate";
         break;
@@ -178,7 +178,7 @@ export function simulateScoreChanges(
         impact = utilizationImpact(oldUtil, newUtil);
         currentBalance = newBalance;
         actionLabel = `Pay Down $${reduction.toLocaleString()} in Balances`;
-        explanation = `Reduces utilization from ${oldUtil}% to ${newUtil}%. Credit utilization is 30% of FICO score.`;
+        explanation = `Reduces utilization from ${oldUtil}% to ${newUtil}%. Utilization is a major internal readiness factor.`;
         timeframe = "Immediate to 30 days (next reporting cycle)";
         difficulty = "Easy";
         break;
@@ -215,7 +215,7 @@ export function simulateScoreChanges(
         impact = currentInquiries <= 3 ? 3 : 5 + Math.round(Math.random() * 3);
         currentInquiries--;
         actionLabel = "Remove Hard Inquiry";
-        explanation = "Hard inquiries account for ~10% of FICO score. Each removal provides a small boost.";
+        explanation = "Hard inquiries are an internal readiness factor. Each removal may provide a small platform-score improvement.";
         timeframe = "30-45 days";
         difficulty = "Easy";
         break;
@@ -235,7 +235,7 @@ export function simulateScoreChanges(
       case "pay_collection": {
         impact = 10 + Math.round(Math.random() * 15);
         actionLabel = "Pay Collection in Full";
-        explanation = "Paid collections under newer scoring models (FICO 9, VantageScore 3.0+) have less negative impact.";
+        explanation = "Paid collections may have less negative internal workflow impact after resolution.";
         timeframe = "30-45 days after update";
         difficulty = "Moderate";
         break;

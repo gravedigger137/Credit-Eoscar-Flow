@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, csrfFetch } from "@/lib/queryClient";
 import { useState, useRef } from "react";
 import {
   FileText, CheckCircle2, Clock, AlertTriangle, Download,
@@ -82,7 +82,7 @@ export default function Metro2() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("targetFormat", targetFormat);
-      const r = await fetch("/api/metro2/convert", { method: "POST", body: fd, credentials: "include" });
+      const r = await csrfFetch("/api/metro2/convert", { method: "POST", body: fd });
       if (!r.ok) throw new Error("Conversion failed");
       return r.json();
     },

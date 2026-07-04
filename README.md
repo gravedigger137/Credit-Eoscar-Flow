@@ -6,6 +6,12 @@ Credit-Eoscar is the Infinite Arcadia credit-operations platform for customer on
 
 It is not a bank, lender, law firm, CPA firm, credit bureau, e-OSCAR operator, or approved credit facility. Legal, accounting, tax, banking, credit, securities, insurance, lender-facing, and bureau-facing decisions require qualified professional review.
 
+## Unified Platform Direction
+
+Credit-Eoscar is planned to become the credit repair, onboarding, e-OSCAR readiness, Metro 2, document-room, and credit-operations module inside the larger BrandonFintech platform. BrandonFintech should remain the main fintech shell for accounts, ledger, payments, transfers, dashboard, and platform identity work.
+
+This direction is documented in `MERGER_PLAN.md` and `docs/UNIFIED_PLATFORM.md`. It is not a completed code merge. Credit-Eoscar and BrandonFintech should stay independently deployable until shared identity, route mapping, database ownership, CORS, audit logging, and rollback procedures are proven in staging.
+
 ## Purpose
 
 The platform organizes truthful records and workflows for:

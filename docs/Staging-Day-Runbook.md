@@ -47,7 +47,7 @@ Configuration:
 - Credit-Eoscar `CORS_ALLOWED_ORIGINS` includes only staging origins.
 - BrandonFintech `Jwt__Issuer` uses the staging API domain.
 - BrandonFintech `Cors__AllowedOrigins` uses the staging frontend domain.
-- Stripe keys are `sk_test_*`.
+- Stripe keys are test-mode values stored in the staging secret manager.
 - Stripe webhook secrets are test webhook secrets.
 - Plaid environment is `sandbox`.
 - Bureau environment is sandbox/test only.
@@ -150,4 +150,3 @@ No-go if:
 - Record Stripe webhook endpoint IDs.
 - Record any failed smoke tests and owners.
 - Do not promote to production until production blockers are closed.
-

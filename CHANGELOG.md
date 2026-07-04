@@ -22,10 +22,11 @@ Never include secret values or sensitive customer details.
 Update before each commit intended for staging or production.
 
 ## Related Documentation
-`VersionHistory.md`, `Deployment.md`.
+`VersionHistory.md`, `DEPLOYMENT.md`.
 
 ## Unreleased
 
+- Added final release readiness record and shared integration contract documentation.
 - Added due-diligence binder documentation.
 - Added master asset register and proprietary Credit-Eoscar internal score documentation.
 - Added document-room database schema and audit-event model.

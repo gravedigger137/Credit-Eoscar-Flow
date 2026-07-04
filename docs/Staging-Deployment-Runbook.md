@@ -101,7 +101,7 @@ BrandonFintech staging:
 Rules:
 
 - Use test mode only.
-- Use `sk_test_*` and `whsec_*` staging values only.
+- Use Stripe test-mode secret and webhook values from the staging secret manager only.
 - Tag Stripe objects with product metadata when available.
 - Do not reuse production webhook secrets.
 
@@ -127,4 +127,3 @@ Rules:
 8. Deploy Cloudflare Worker staging.
 9. Run staging smoke tests.
 10. Do not promote to production until blockers are closed.
-

@@ -222,7 +222,7 @@ PORT=5000
 PUBLIC_APP_URL=https://staging-app.infinitearcadia.com
 CORS_ALLOWED_ORIGINS=https://staging-app.infinitearcadia.com,https://staging.infinitearcadia.com
 UPLOAD_MAX_BYTES=52428800
-DATABASE_URL=postgres://STAGING_USER:STAGING_PASSWORD@STAGING_DB_HOST:5432/credit_eoscar_staging
+DATABASE_URL=STAGING_POSTGRES_CONNECTION_STRING
 DB_POOL_MAX=10
 DB_IDLE_TIMEOUT_MS=30000
 DB_CONNECTION_TIMEOUT_MS=10000
@@ -231,8 +231,8 @@ AI_PROVIDER=openai
 AI_MODEL=gpt-4o
 OPENAI_API_KEY=REPLACE_WITH_STAGING_KEY_OR_EMPTY
 LOCAL_MODEL_ENDPOINT=
-STRIPE_SECRET_KEY=sk_test_REPLACE_ME
-STRIPE_WEBHOOK_SECRET=whsec_REPLACE_ME
+STRIPE_SECRET_KEY=STRIPE_TEST_SECRET_KEY_PLACEHOLDER
+STRIPE_WEBHOOK_SECRET=STRIPE_TEST_WEBHOOK_SECRET_PLACEHOLDER
 PLAID_CLIENT_ID=REPLACE_WITH_SANDBOX_CLIENT_ID
 PLAID_SECRET=REPLACE_WITH_SANDBOX_SECRET
 PLAID_ENV=sandbox
@@ -253,8 +253,8 @@ ConnectionStrings__Postgres=Host=STAGING_DB_HOST;Port=5432;Database=brandonfinte
 Jwt__Issuer=https://staging-api-fintech.infinitearcadia.com
 Jwt__Audience=BrandonFintechStagingUsers
 Jwt__Secret=REPLACE_WITH_LONG_RANDOM_STAGING_JWT_SECRET
-Stripe__SecretKey=sk_test_REPLACE_ME
-Stripe__WebhookSecret=whsec_REPLACE_ME
+Stripe__SecretKey=STRIPE_TEST_SECRET_KEY_PLACEHOLDER
+Stripe__WebhookSecret=STRIPE_TEST_WEBHOOK_SECRET_PLACEHOLDER
 Cors__AllowedOrigins=https://staging-fintech.infinitearcadia.com
 ```
 
@@ -290,4 +290,3 @@ Recommended practical staging budget:
 - Add more if using paid database tiers, persistent file storage, external AI APIs, or higher Worker usage.
 
 Pricing changes frequently. Confirm final costs in each provider dashboard before enabling paid services.
-

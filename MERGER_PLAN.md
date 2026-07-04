@@ -422,16 +422,16 @@ If integration fails:
 - Cloudflare DNS, Workers, Pages, or equivalent routing.
 - Hosting platform configuration for BrandonFintech API and Credit-Eoscar API.
 
-## Integration TODOs
+## Open Integration Backlog
 
-- TODO: Define shared identity provider decision record.
-- TODO: Define cross-system reference schema before writing any synchronization code.
-- TODO: Add read-only Credit-Eoscar summary endpoint only after RBAC and response-shape review.
-- TODO: Add BrandonFintech navigation link to Credit-Eoscar only after staging domains are stable.
-- TODO: Add end-to-end staging smoke tests for booking, login, dashboard, account creation, credit onboarding, and notifications.
-- TODO: Add a shared incident response and rollback drill for both products.
-- TODO: Add module contract tests before any BrandonFintech runtime dependency on Credit-Eoscar.
-- TODO: Define shared notification payloads and audit correlation IDs.
+- Define shared identity provider decision record.
+- Define cross-system reference schema before writing any synchronization code.
+- Add read-only Credit-Eoscar summary endpoint only after RBAC and response-shape review.
+- Add BrandonFintech navigation link to Credit-Eoscar only after staging domains are stable.
+- Add end-to-end staging smoke tests for booking, login, dashboard, account creation, credit onboarding, and notifications.
+- Add a shared incident response and rollback drill for both products.
+- Add module contract tests before any BrandonFintech runtime dependency on Credit-Eoscar.
+- Use `docs/shared-core/Integration-Contracts.md` for shared notification payloads, customer references, audit event correlation, and integration smoke-test expectations.
 
 ## Go / No-Go
 

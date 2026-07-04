@@ -62,3 +62,10 @@ The first implementation step should be a read-only integration contract:
 ```
 
 Do not publish events to production until authentication, authorization, retry behavior, audit logging, and error handling are tested in staging.
+
+## Related Documentation
+
+- `docs/shared-core/Integration-Contracts.md`
+- `MERGER_PLAN.md`
+- `docs/UNIFIED_PLATFORM.md`
+- `docs/architecture/Unified-Platform-Architecture.md`

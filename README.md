@@ -17,6 +17,7 @@ Architecture scaffolding for the integration lives in:
 - `docs/architecture/Unified-Platform-Architecture.md`
 - `docs/architecture/unified-platform.mmd`
 - `docs/shared-core/README.md`
+- `docs/shared-core/Integration-Contracts.md`
 - `docs/modules/Credit-Eoscar-Module.md`
 
 ## Purpose
@@ -84,6 +85,7 @@ Use migrations for schema changes. Review `docs/Production-Readiness-Go-No-Go.md
 - `docs/Credit-Facility-Readiness.md`
 - `docs/Credit-Algorithm.md`
 - `docs/compliance/README.md`
+- `docs/FINAL_RELEASE_READINESS.md`
 - `docs/due-diligence/00_Master_Index.md`
 - `docs/Enterprise-Operations-Overview.md`
 - `docs/Security-And-Audit-Controls.md`

@@ -30,14 +30,14 @@ Edit `.env`:
 
 ```env
 # Database (PostgreSQL)
-DATABASE_URL=postgres://user:password@localhost:5432/creditrepair
+DATABASE_URL=POSTGRES_CONNECTION_STRING_PLACEHOLDER
 
 # OpenAI (for AI features - GPT-4o)
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=OPENAI_API_KEY_PLACEHOLDER_OR_EMPTY
 
 # Stripe (for payments)
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_SECRET_KEY=STRIPE_TEST_SECRET_KEY_PLACEHOLDER
+STRIPE_WEBHOOK_SECRET=STRIPE_TEST_WEBHOOK_SECRET_PLACEHOLDER
 
 # Session encryption
 SESSION_SECRET=generate-a-secure-random-string-here

@@ -448,11 +448,11 @@ app.use((req, res, next) => {
   app.use("/api/v1", v1Router);
   app.use("/api", v1Router);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = status >= 500 ? "Internal Server Error" : err.message || "Request failed";
 
-    console.error("Internal Server Error:", safeErrorMessage(err));
+  console.error("Internal Server Error:", safeErrorMessage(err));
 
     if (res.headersSent) {
       return next(err);

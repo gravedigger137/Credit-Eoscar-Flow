@@ -61,6 +61,12 @@ The platform organizes truthful records and workflows for:
 
 Do not commit `.env`, credentials, SSNs, EINs, bureau credentials, Stripe keys, Plaid keys, OpenAI keys, database passwords, or customer PII documents. Store secrets only in platform secret managers. Admin route families use centralized RBAC, bootstrap administrators are configured through `BOOTSTRAP_ADMIN_EMAILS`, and sensitive stored config should be encrypted with `SENSITIVE_CONFIG_ENCRYPTION_KEY`. Document templates are drafts and require attorney review.
 
+## Compliance Documentation
+
+The compliance documentation framework lives in `docs/compliance/`. It covers UCC legal definitions, negotiable-instrument workflows, trust records, KYC/KYB, AML/BSA readiness, FCRA/CROA/ECOA/TILA/EFTA/NACHA readiness, Stripe/PCI scope notes, consent tracking, e-signature readiness, audit logging, incident response, vendor risk, backup/restore compliance, and the compliance gap register.
+
+These documents are control mapping and readiness scaffolding only. They do not claim legal approval, bureau approval, banking approval, lender approval, regulatory approval, or production integration approval.
+
 ## Maintenance
 
 Run these before handoff:
@@ -77,6 +83,7 @@ Use migrations for schema changes. Review `docs/Production-Readiness-Go-No-Go.md
 - `docs/Master-Asset-Register.md`
 - `docs/Credit-Facility-Readiness.md`
 - `docs/Credit-Algorithm.md`
+- `docs/compliance/README.md`
 - `docs/due-diligence/00_Master_Index.md`
 - `docs/Enterprise-Operations-Overview.md`
 - `docs/Security-And-Audit-Controls.md`

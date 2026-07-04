@@ -182,6 +182,8 @@ Required boundaries:
 - No secrets in Git.
 - No fake integrations, credentials, approvals, partnerships, collateral values, or lender status.
 
+The compliance documentation framework is maintained under `docs/compliance/`. It separates legal references, document generation support, workflow automation, user-entered terms, execution status, version history, audit requirements, and external approval requirements. The framework is documentation and readiness scaffolding only; it does not make any legal instrument effective or any regulated workflow approved.
+
 ## Module Ownership
 
 | Module | Owner | Source of Truth |

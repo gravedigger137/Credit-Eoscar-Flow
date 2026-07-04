@@ -146,3 +146,19 @@ https://app.infinitearcadia.com/api/auth/github/callback
 ## Enterprise Infrastructure Path
 
 For a hardened production deployment, run this container behind TLS, use managed PostgreSQL with backups, store secrets in platform secrets, mount `/app/uploads` to durable object storage or a persistent volume, and run migrations as a controlled release step before starting new app instances.
+
+## Unified Platform Deployment Path
+
+During the BrandonFintech merger phase, deploy Credit-Eoscar and BrandonFintech independently:
+
+- Credit-Eoscar keeps its own deployment, database, uploads storage, secrets, health checks, and rollback path.
+- BrandonFintech keeps its own API, web frontend, database, Stripe configuration, worker configuration, secrets, health checks, and rollback path.
+- CORS allowlists must include only the approved staging or production domains for the other app.
+- Cross-app links should be disabled by configuration if either app fails smoke tests.
+- Do not deploy a shared auth bridge until OIDC/SSO, RBAC, MFA, CSRF/JWT compatibility, and rollback behavior are validated in staging.
+
+Related docs:
+
+- `MERGER_PLAN.md`
+- `docs/UNIFIED_PLATFORM.md`
+- `docs/architecture/Unified-Platform-Architecture.md`

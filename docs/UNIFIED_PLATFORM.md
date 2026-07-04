@@ -52,6 +52,45 @@ Rules:
 - Never commit Stripe secrets.
 - Do not imply live payments are configured unless live keys, webhooks, and smoke tests are complete.
 
+## Wallet
+
+Wallet functionality is a future module. It may include stored payment methods, external wallet references, or digital asset records only after custody, privacy, security, and regulatory boundaries are defined. Do not treat wallet records as bank balances.
+
+## Cards
+
+Cards are future-only. Issuing, cardholder agreements, dispute handling, chargeback operations, KYC/KYB, sanctions checks, and issuer-processor relationships must be approved before any production card functionality is represented as live.
+
+## CRM
+
+CRM should unify lead, customer, and support context without merging sensitive data stores. Initial CRM integration should use references:
+
+- platform user ID
+- credit client ID
+- source system
+- consent status
+- onboarding status
+- last workflow event
+
+## Analytics
+
+Analytics should aggregate non-sensitive summary metrics first:
+
+- onboarding counts
+- payment counts
+- account counts
+- notification counts
+- workflow queue counts
+
+Do not move raw credit reports, SSNs, ledger entries, or payment credentials into analytics stores without a data-classification review.
+
+## Notifications
+
+Credit-Eoscar owns current credit workflow notifications. A shared notification service should start as an event contract and read-only dashboard adapter. It must support email, SMS, push, system inbox, admin inbox, workflow events, and audit events only after provider configuration and consent rules are implemented.
+
+## Administration
+
+Administration remains product-local until shared identity and permission inheritance are designed. High-risk actions require product-local RBAC, MFA where available, audit events, and human review.
+
 ## Credit Repair
 
 Credit-Eoscar owns credit repair workflow support:
@@ -171,3 +210,11 @@ The first production-safe step is not a code merge. It is a staged ecosystem int
 4. Add shared identity design.
 5. Add read-only links and summaries.
 6. Add event-based sync only after audit and rollback are proven.
+
+## Related Architecture Docs
+
+- `MERGER_PLAN.md`
+- `docs/architecture/Unified-Platform-Architecture.md`
+- `docs/architecture/unified-platform.mmd`
+- `docs/shared-core/README.md`
+- `docs/modules/Credit-Eoscar-Module.md`

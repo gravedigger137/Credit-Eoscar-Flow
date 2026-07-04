@@ -61,6 +61,40 @@ BrandonFintech should become the primary platform shell, with Credit-Eoscar moun
   - Use OIDC/SSO or an identity broker.
   - Do not directly share password tables between products.
 
+Detailed architecture scaffolding now lives in:
+
+- `docs/architecture/Unified-Platform-Architecture.md`
+- `docs/architecture/unified-platform.mmd`
+- `docs/shared-core/README.md`
+- `docs/modules/Credit-Eoscar-Module.md`
+
+## Phase 1 Implementation Scope
+
+This phase is architecture-only scaffolding:
+
+- Document current architecture and route boundaries.
+- Document shared-core candidates.
+- Document identity, customer/client, notification, payment, AI, and dashboard strategy.
+- Keep Credit-Eoscar and BrandonFintech independently deployable.
+- Do not move runtime code.
+- Do not merge databases.
+- Do not add cross-system writes.
+- Do not change existing Credit-Eoscar booking, onboarding, notification, or security flows.
+
+## Shared Component Candidates
+
+| Component | Candidate Shared Form | Runtime Change Now |
+| --- | --- | --- |
+| Authentication | OIDC/SSO identity provider | No |
+| Authorization | Shared permission vocabulary with product-local enforcement | No |
+| Notifications | Event contracts and source-system tagging | No |
+| Audit logging | Correlation IDs and event taxonomy | No |
+| Email/SMS | Provider adapters behind a notification service | No |
+| AI | Shared AI gateway with provider abstraction | No |
+| Configuration | Secret-manager-backed naming conventions | No |
+| Validation | Shared response and error standards | No |
+| Customer model | Reference IDs, not table merge | No |
+
 ## BrandonFintech as Main Shell
 
 BrandonFintech should provide the unified navigation and customer/admin entry point:
@@ -117,6 +151,13 @@ Use a shared identity provider or OIDC bridge later. Recommended path:
 
 Do not share password tables directly. Password stores encode different assumptions about hashing, session/JWT behavior, MFA state, recovery flows, roles, lockout, and audit scope.
 
+### Compatibility Rules
+
+- Credit-Eoscar session cookies and CSRF tokens remain intact.
+- BrandonFintech JWT issuer, audience, signing key, roles, and expiration remain intact.
+- Shared identity is a future adapter, not a direct database dependency.
+- Admin MFA must be enforced per product until shared identity is proven.
+
 ## Shared Customer and Client Model
 
 Use reference IDs instead of a merged table.
@@ -171,6 +212,17 @@ Target strategy:
 
 Do not move notification storage until both audit semantics and retention policies are aligned.
 
+Initial read-only event names:
+
+- `credit.booking.created`
+- `credit.client.created`
+- `credit.onboarding.started`
+- `credit.notification.created`
+- `credit.document.review_required`
+- `finance.payment.created`
+- `finance.transfer.completed`
+- `admin.review.required`
+
 ## Shared Billing and Payments Strategy
 
 Keep Stripe responsibilities separate until explicitly unified:
@@ -194,6 +246,17 @@ If Stripe accounts are shared later, every event must include product metadata:
 - `source_system`
 
 Do not route both products through one webhook handler until product routing, replay protection, idempotency, and test mode behavior are proven.
+
+Payment routing strategy:
+
+- Consumer payments: BrandonFintech owns account/payment surfaces.
+- Business payments: future BrandonFintech business module, not implemented.
+- Subscription billing: Credit-Eoscar may own SaaS/service subscription billing if configured.
+- Credit services: Credit-Eoscar billing remains product-specific.
+- Banking services: BrandonFintech remains source of truth.
+- Future lending: documentation and readiness only until regulated approvals exist.
+
+Every future shared payment event must include `source_system`, `product`, `correlation_id`, and Stripe test/live environment metadata.
 
 ## Shared Database Strategy
 
@@ -303,6 +366,15 @@ Each service needs independent:
 - Health/readiness checks.
 - Rollback target.
 
+Staging validation must prove:
+
+- Credit-Eoscar public booking still works.
+- Credit-Eoscar onboarding and notifications still work.
+- BrandonFintech auth/accounts/payments/transfers still work.
+- Cross-app links do not bypass auth.
+- No status endpoint exposes secret values.
+- Rollback can disable module links without taking either app down.
+
 ## Rollback Plan
 
 The safest rollback is to keep both apps independently deployable.
@@ -358,6 +430,8 @@ If integration fails:
 - TODO: Add BrandonFintech navigation link to Credit-Eoscar only after staging domains are stable.
 - TODO: Add end-to-end staging smoke tests for booking, login, dashboard, account creation, credit onboarding, and notifications.
 - TODO: Add a shared incident response and rollback drill for both products.
+- TODO: Add module contract tests before any BrandonFintech runtime dependency on Credit-Eoscar.
+- TODO: Define shared notification payloads and audit correlation IDs.
 
 ## Go / No-Go
 

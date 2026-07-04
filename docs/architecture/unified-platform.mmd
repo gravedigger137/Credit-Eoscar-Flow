@@ -1,0 +1,49 @@
+flowchart TD
+  IA[Infinite Arcadia] --> BF[BrandonFintech Platform Shell]
+
+  BF --> Banking[Banking]
+  BF --> Accounts[Accounts]
+  BF --> Payments[Payments]
+  BF --> Transfers[Transfers]
+  BF --> Lending[Lending Readiness]
+  BF --> Wallet[Wallet Future]
+  BF --> Cards[Cards Future]
+  BF --> CRM[CRM Future]
+  BF --> Analytics[Analytics]
+  BF --> Compliance[Compliance]
+  BF --> Notifications[Platform Notifications Future]
+  BF --> Admin[Administration]
+  BF --> AI[Shared AI Gateway]
+  BF --> Credit[Credit Module: Credit-Eoscar]
+
+  Credit --> Booking[Public Booking]
+  Credit --> Signup[User Signup]
+  Credit --> ClientCreation[Client Creation]
+  Credit --> Onboarding[Onboarding Pipeline]
+  Credit --> Inbox[Admin Notifications and System Inbox]
+  Credit --> ClientStatus[Client Status Tracking]
+  Credit --> CreditRepair[Credit Repair]
+  Credit --> Bureau[Bureau Uploads]
+  Credit --> Reports[Credit Reports]
+  Credit --> Tradelines[Tradelines]
+  Credit --> Metro2[Metro 2]
+  Credit --> EOscar[e-OSCAR Readiness]
+  Credit --> CreditAnalytics[Credit Analytics]
+
+  BF -. future OIDC/SSO .-> Identity[Shared Identity Provider]
+  Credit -. future OIDC/SSO .-> Identity
+
+  BF --> BFDB[(BrandonFintech PostgreSQL)]
+  Credit --> CEDB[(Credit-Eoscar PostgreSQL)]
+
+  AI --> LocalAI[Local AI or Ollama]
+  AI --> ExternalAI[External AI Provider]
+
+  Stripe[Stripe] --> Payments
+  Stripe -. separate product routing .-> Credit
+
+  style Wallet stroke-dasharray: 4 4
+  style Cards stroke-dasharray: 4 4
+  style Lending stroke-dasharray: 4 4
+  style CRM stroke-dasharray: 4 4
+  style Notifications stroke-dasharray: 4 4

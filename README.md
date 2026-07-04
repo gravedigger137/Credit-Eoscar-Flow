@@ -12,6 +12,13 @@ Credit-Eoscar is planned to become the credit repair, onboarding, e-OSCAR readin
 
 This direction is documented in `MERGER_PLAN.md` and `docs/UNIFIED_PLATFORM.md`. It is not a completed code merge. Credit-Eoscar and BrandonFintech should stay independently deployable until shared identity, route mapping, database ownership, CORS, audit logging, and rollback procedures are proven in staging.
 
+Architecture scaffolding for the integration lives in:
+
+- `docs/architecture/Unified-Platform-Architecture.md`
+- `docs/architecture/unified-platform.mmd`
+- `docs/shared-core/README.md`
+- `docs/modules/Credit-Eoscar-Module.md`
+
 ## Purpose
 
 The platform organizes truthful records and workflows for:

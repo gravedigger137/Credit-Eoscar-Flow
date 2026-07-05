@@ -1,3 +1,5 @@
+import type { DomainEvent } from "@infinite-arcadia/event-bus";
+
 export type CreditEoscarPlatformEventType =
   | "BookingCreated"
   | "ClientCreated"
@@ -5,17 +7,12 @@ export type CreditEoscarPlatformEventType =
   | "NotificationCreated"
   | "AuditLogged";
 
-export interface PlatformDomainEvent<TPayload extends Record<string, unknown> = Record<string, unknown>> {
-  id: string;
-  type: CreditEoscarPlatformEventType;
-  version: 1;
-  source: "credit-eoscar";
-  occurredAt: string;
-  payload: TPayload;
-  tenantId?: string;
-  correlationId?: string;
-  causationId?: string;
-}
+export type PlatformDomainEvent<TPayload extends Record<string, unknown> = Record<string, unknown>> =
+  DomainEvent<TPayload> & {
+    type: CreditEoscarPlatformEventType;
+    source: "credit-eoscar";
+    version: 1;
+  };
 
 export interface PlatformPublishResult {
   status: "disabled" | "published" | "not_configured";

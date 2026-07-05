@@ -1,4 +1,5 @@
 import { isPlatformIntegrationEnabled } from "./platform-feature";
+import { InMemoryEventBus } from "@infinite-arcadia/event-bus";
 import type {
   PlatformDomainEvent,
   PlatformEventPublisher,
@@ -12,14 +13,11 @@ export interface CreditEoscarPlatformAdapterOptions {
 
 export class CreditEoscarPlatformAdapter {
   private readonly enabled: boolean;
-  private readonly publisher?: PlatformEventPublisher;
+  private readonly publisher: PlatformEventPublisher;
 
   constructor(options: CreditEoscarPlatformAdapterOptions = {}) {
     this.enabled = options.enabled ?? false;
-
-    if (options.publisher !== undefined) {
-      this.publisher = options.publisher;
-    }
+    this.publisher = options.publisher ?? new EventBusPublisher(new InMemoryEventBus());
   }
 
   async publish(event: PlatformDomainEvent): Promise<PlatformPublishResult> {
@@ -30,14 +28,6 @@ export class CreditEoscarPlatformAdapter {
       };
     }
 
-    if (this.publisher === undefined) {
-      return {
-        status: "not_configured",
-        eventType: event.type,
-        eventId: event.id
-      };
-    }
-
     await this.publisher.publish(event);
 
     return {
@@ -45,6 +35,18 @@ export class CreditEoscarPlatformAdapter {
       eventType: event.type,
       eventId: event.id
     };
+  }
+}
+
+export class EventBusPublisher implements PlatformEventPublisher {
+  constructor(private readonly eventBus: InMemoryEventBus) {}
+
+  async publish(event: PlatformDomainEvent): Promise<void> {
+    const result = await this.eventBus.publish(event);
+
+    if (!result.ok) {
+      throw result.error;
+    }
   }
 }
 

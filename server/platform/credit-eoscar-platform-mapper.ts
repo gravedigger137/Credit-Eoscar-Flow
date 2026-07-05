@@ -1,4 +1,4 @@
-import crypto from "node:crypto";
+import { createDomainEvent } from "@infinite-arcadia/event-bus";
 import type { PlatformDomainEvent } from "./platform-contracts";
 
 interface EventOptions {
@@ -47,7 +47,7 @@ export interface AuditLoggedInput {
   createdAt?: Date | string;
 }
 
-function iso(value?: Date | string): string {
+export function toPlatformIso(value?: Date | string): string {
   if (value === undefined) {
     return new Date().toISOString();
   }
@@ -55,24 +55,23 @@ function iso(value?: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-function eventId(type: string): string {
-  return `credit_eoscar_${type}_${crypto.randomUUID()}`;
-}
-
 function baseEvent<TPayload extends Record<string, unknown>>(
   type: PlatformDomainEvent<TPayload>["type"],
   payload: TPayload,
   options: EventOptions = {}
 ): PlatformDomainEvent<TPayload> {
-  return {
-    id: eventId(type),
+  const event = createDomainEvent({
     type,
-    version: 1,
     source: "credit-eoscar",
-    occurredAt: iso(options.occurredAt),
     payload,
+    version: 1,
     ...(options.tenantId === undefined ? {} : { tenantId: options.tenantId }),
     ...(options.correlationId === undefined ? {} : { correlationId: options.correlationId })
+  }) as PlatformDomainEvent<TPayload>;
+
+  return {
+    ...event,
+    occurredAt: toPlatformIso(options.occurredAt)
   };
 }
 
@@ -87,7 +86,7 @@ export function mapBookingCreatedToPlatformEvent(
       clientName: input.clientName,
       phone: input.phone,
       ...(input.email === undefined ? {} : { email: input.email }),
-      bookedAt: iso(input.bookedAt ?? options.occurredAt)
+      bookedAt: toPlatformIso(input.bookedAt ?? options.occurredAt)
     },
     options
   );
@@ -105,7 +104,7 @@ export function mapClientCreatedToPlatformEvent(
       lastName: input.lastName,
       email: input.email,
       status: input.status ?? "onboarding",
-      createdAt: iso(input.createdAt ?? options.occurredAt)
+      createdAt: toPlatformIso(input.createdAt ?? options.occurredAt)
     },
     options
   );
@@ -121,7 +120,7 @@ export function mapOnboardingStartedToPlatformEvent(
       clientId: input.clientId,
       stepCount: input.stepCount,
       source: input.source,
-      startedAt: iso(input.startedAt ?? options.occurredAt)
+      startedAt: toPlatformIso(input.startedAt ?? options.occurredAt)
     },
     options
   );
@@ -138,7 +137,7 @@ export function mapNotificationCreatedToPlatformEvent(
       type: input.type,
       title: input.title,
       ...(input.clientId === undefined ? {} : { clientId: input.clientId }),
-      createdAt: iso(input.createdAt ?? options.occurredAt)
+      createdAt: toPlatformIso(input.createdAt ?? options.occurredAt)
     },
     options
   );
@@ -152,7 +151,7 @@ export function mapAuditLoggedToPlatformEvent(input: AuditLoggedInput, options: 
       action: input.action,
       entityType: input.entityType,
       entityId: input.entityId,
-      createdAt: iso(input.createdAt ?? options.occurredAt)
+      createdAt: toPlatformIso(input.createdAt ?? options.occurredAt)
     },
     options
   );

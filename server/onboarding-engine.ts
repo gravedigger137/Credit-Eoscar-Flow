@@ -2,6 +2,12 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { onboardingSteps, clients } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import {
+  mapBookingCreatedToPlatformEvent,
+  mapOnboardingStartedToPlatformEvent,
+  safelyPublishPlatformEvent,
+  safelyStartPlatformOnboardingWorkflow,
+} from "./platform";
 
 const ONBOARDING_STEPS = [
   { step: "welcome", label: "Welcome & Account Setup" },
@@ -46,6 +52,13 @@ export async function initializeOnboarding(clientId: string) {
     read: false,
     clientId,
   });
+
+  safelyPublishPlatformEvent(mapOnboardingStartedToPlatformEvent({
+    clientId,
+    stepCount: ONBOARDING_STEPS.length,
+    source: "manual",
+  }));
+  safelyStartPlatformOnboardingWorkflow(clientId, ONBOARDING_STEPS.length);
 
   return steps;
 }
@@ -109,6 +122,13 @@ export async function autoOnboardFromBooking(name: string, phone: string, email?
   });
 
   const steps = await initializeOnboarding(client.id);
+
+  safelyPublishPlatformEvent(mapBookingCreatedToPlatformEvent({
+    bookingId: `booking_${client.id}`,
+    clientName: `${firstName} ${lastName}`,
+    phone,
+    ...(email === undefined ? {} : { email }),
+  }));
 
   await advanceOnboarding(client.id, "welcome", JSON.stringify({ source: "booking", bookedAt: new Date().toISOString() }));
 

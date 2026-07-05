@@ -8,6 +8,10 @@ import {
   mapClientCreatedToPlatformEvent,
   mapNotificationCreatedToPlatformEvent,
   mapOnboardingStartedToPlatformEvent,
+  publishPlatformEvent,
+  routeNotificationThroughPlatform,
+  startPlatformOnboardingWorkflow,
+  creditEoscarPlatformEventBus,
   type PlatformDomainEvent
 } from "./index";
 
@@ -114,3 +118,97 @@ test("publishes through the configured in-process publisher when enabled", async
   assert.equal(published.length, 1);
   assert.equal(published[0]?.type, "OnboardingStarted");
 });
+
+test("routes runtime event publishing through the shared event bus when enabled", async () => {
+  await withPlatformIntegration("true", async () => {
+    const received: PlatformDomainEvent[] = [];
+    const unsubscribe = creditEoscarPlatformEventBus.subscribeAll((event) => {
+      received.push(event as PlatformDomainEvent);
+    });
+
+    try {
+      const event = mapClientCreatedToPlatformEvent({
+        clientId: "client_runtime_123",
+        firstName: "Runtime",
+        lastName: "Client",
+        email: "runtime@example.test"
+      });
+
+      const result = await publishPlatformEvent(event);
+
+      assert.equal(result.status, "published");
+      assert.equal(result.eventType, "ClientCreated");
+      assert.equal(received.some((candidate) => candidate.id === event.id), true);
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
+test("keeps runtime event publishing disabled when the feature flag is off", async () => {
+  await withPlatformIntegration(undefined, async () => {
+    const event = mapAuditLoggedToPlatformEvent({
+      auditId: "audit_runtime_123",
+      action: "runtime.disabled",
+      entityType: "test",
+      entityId: "test_123"
+    });
+
+    const result = await publishPlatformEvent(event);
+    const workflowInstanceId = await startPlatformOnboardingWorkflow("client_disabled_123", 12);
+
+    assert.equal(result.status, "disabled");
+    assert.equal(result.eventType, "AuditLogged");
+    assert.equal(workflowInstanceId, undefined);
+  });
+});
+
+test("routes notifications and workflows through shared engines when enabled", async () => {
+  await withPlatformIntegration("true", async () => {
+    const received: PlatformDomainEvent[] = [];
+    const unsubscribe = creditEoscarPlatformEventBus.subscribeAll((event) => {
+      received.push(event as PlatformDomainEvent);
+    });
+
+    try {
+      const notificationResult = await routeNotificationThroughPlatform({
+        id: "notification_runtime_123",
+        type: "client",
+        title: "Runtime Notification",
+        message: "Shared notification engine routed this message.",
+        read: false,
+        clientId: "client_runtime_123",
+        createdAt: new Date("2026-01-01T00:00:00.000Z")
+      });
+      const workflowInstanceId = await startPlatformOnboardingWorkflow("client_runtime_123", 12);
+
+      assert.equal(notificationResult.status, "published");
+      assert.equal(notificationResult.eventType, "NotificationCreated");
+      assert.equal(notificationResult.eventId, "notification_runtime_123");
+      assert.equal(received.some((event) => event.type === "NotificationCreated"), true);
+      assert.equal(workflowInstanceId?.startsWith("wf_"), true);
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
+async function withPlatformIntegration<T>(value: string | undefined, run: () => Promise<T>): Promise<T> {
+  const originalValue = process.env.PLATFORM_INTEGRATION_ENABLED;
+
+  if (value === undefined) {
+    delete process.env.PLATFORM_INTEGRATION_ENABLED;
+  } else {
+    process.env.PLATFORM_INTEGRATION_ENABLED = value;
+  }
+
+  try {
+    return await run();
+  } finally {
+    if (originalValue === undefined) {
+      delete process.env.PLATFORM_INTEGRATION_ENABLED;
+    } else {
+      process.env.PLATFORM_INTEGRATION_ENABLED = originalValue;
+    }
+  }
+}

@@ -1,7 +1,6 @@
-import { InMemoryEventBus } from "@infinite-arcadia/event-bus";
-import { NotificationEngine, type NotificationProvider, type NotificationRequest } from "@infinite-arcadia/notification-engine";
-import { createId, nowIso } from "@infinite-arcadia/shared-core";
-import { WorkflowEngine, type WorkflowDefinition } from "@infinite-arcadia/workflow-engine";
+import { createId, InMemoryEventBus, nowIso } from "./platform-core";
+import { NotificationEngine, type NotificationProvider, type NotificationRequest } from "./platform-notification-engine";
+import { WorkflowEngine, type WorkflowDefinition } from "./platform-workflow-engine";
 import type { Notification } from "@shared/schema";
 import { CreditEoscarPlatformAdapter, EventBusPublisher } from "./credit-eoscar-platform-adapter";
 import type { PlatformDomainEvent, PlatformPublishResult } from "./platform-contracts";

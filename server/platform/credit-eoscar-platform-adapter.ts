@@ -1,5 +1,5 @@
 import { isPlatformIntegrationEnabled } from "./platform-feature";
-import { InMemoryEventBus } from "@infinite-arcadia/event-bus";
+import { InMemoryEventBus } from "./platform-core";
 import type {
   PlatformDomainEvent,
   PlatformEventPublisher,

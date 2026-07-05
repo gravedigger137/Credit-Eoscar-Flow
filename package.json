@@ -18,10 +18,6 @@
   "dependencies": {
     "@flexbase/equifax-node-client": "^0.1.0",
     "@hookform/resolvers": "^3.10.0",
-    "@infinite-arcadia/event-bus": "file:../Documents/FINTECH IA/packages/event-bus",
-    "@infinite-arcadia/notification-engine": "file:../Documents/FINTECH IA/packages/notification-engine",
-    "@infinite-arcadia/shared-core": "file:../Documents/FINTECH IA/packages/shared-core",
-    "@infinite-arcadia/workflow-engine": "file:../Documents/FINTECH IA/packages/workflow-engine",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",

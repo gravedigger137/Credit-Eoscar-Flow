@@ -1,4 +1,4 @@
-import { readBooleanEnv } from "@infinite-arcadia/shared-core";
+import { readBooleanEnv } from "./platform-core";
 
 export const PLATFORM_INTEGRATION_ENABLED_FLAG = "PLATFORM_INTEGRATION_ENABLED";
 

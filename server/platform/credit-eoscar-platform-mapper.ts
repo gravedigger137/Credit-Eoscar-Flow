@@ -1,4 +1,4 @@
-import { createDomainEvent } from "@infinite-arcadia/event-bus";
+import { createDomainEvent } from "./platform-core";
 import type { PlatformDomainEvent } from "./platform-contracts";
 
 interface EventOptions {

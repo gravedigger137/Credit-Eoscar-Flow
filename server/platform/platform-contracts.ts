@@ -1,4 +1,4 @@
-import type { DomainEvent } from "@infinite-arcadia/event-bus";
+import type { DomainEvent } from "./platform-core";
 
 export type CreditEoscarPlatformEventType =
   | "BookingCreated"

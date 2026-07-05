@@ -89,6 +89,12 @@ import { decryptIfEncrypted, encryptIfSensitive, isSensitiveConfigKey, maskSecre
 import { rateLimit } from "./rate-limit";
 import { maskLast4, safeErrorMessage } from "./security-utils";
 import {
+  getPlaidConfigStatus,
+  ProviderConfigValidationError,
+  savePlaidConfig,
+  testPlaidConfigReadiness,
+} from "./provider-config";
+import {
   BureauApiConfigValidationError,
   getAllBureauConfigStatuses,
   saveBureauApiConfig,
@@ -2760,8 +2766,48 @@ Generate the COMPLETE document ready to print and mail. Include:
   });
 
   // ─── PLAID BANKING INTEGRATION ──────────────────────────────────────────────
-  app.get("/plaid/status", (_req, res) => {
-    res.json({ configured: isPlaidConfigured() });
+  app.get("/plaid/status", async (_req, res) => {
+    try {
+      const config = await getPlaidConfigStatus(storage);
+      res.json({
+        configured: await isPlaidConfigured(),
+        config,
+      });
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.get("/plaid/config", async (_req, res) => {
+    try {
+      res.json(await getPlaidConfigStatus(storage));
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/plaid/config", async (req, res) => {
+    try {
+      res.json(await savePlaidConfig(req.body, storage));
+    } catch (e) {
+      if (e instanceof ProviderConfigValidationError) {
+        return res.status(400).json({ message: e.message, errors: e.fields });
+      }
+
+      const message = e instanceof Error ? e.message : "";
+      if (message.includes("SENSITIVE_CONFIG_ENCRYPTION_KEY")) {
+        return res.status(500).json({ message: "SENSITIVE_CONFIG_ENCRYPTION_KEY is required before saving sensitive configuration in production." });
+      }
+
+      handleError(res, e);
+    }
+  });
+
+  app.post("/plaid/test", async (_req, res) => {
+    try {
+      res.json(await testPlaidConfigReadiness(storage));
+    } catch (e) {
+      if (e instanceof ProviderConfigValidationError) {
+        return res.status(400).json({ message: e.message, errors: e.fields });
+      }
+      handleError(res, e);
+    }
   });
 
   app.post("/plaid/create-link-token", async (req, res) => {

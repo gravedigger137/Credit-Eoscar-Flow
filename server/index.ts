@@ -22,6 +22,7 @@ import { getRateLimitStatus, rateLimit } from "./rate-limit";
 import { redactSensitiveText, safeErrorMessage } from "./security-utils";
 import { getAIProviderStatus } from "./services/ai.service";
 import { getAllBureauConfigStatuses } from "./bureau-api-config";
+import { getPlaidConfigStatus } from "./provider-config";
 
 const app = express();
 const httpServer = createServer(app);
@@ -145,7 +146,7 @@ async function integrationStatus() {
   const localAiConfigured = !!process.env.LOCAL_MODEL_ENDPOINT;
   const stripeConfigured = !!process.env.STRIPE_SECRET_KEY;
   const stripeWebhookConfigured = !!process.env.STRIPE_WEBHOOK_SECRET;
-  const plaidConfigured = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+  const plaidConfig = await getPlaidConfigStatus(storage);
   const oauthConfigured = !!(
     (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) ||
     (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) ||
@@ -161,7 +162,8 @@ async function integrationStatus() {
       aiProvider: ai.configured ? "configured" : ai.status,
       stripe: stripeConfigured ? "configured" : "not_configured",
       stripeWebhook: stripeWebhookConfigured ? "configured" : "not_configured",
-      plaid: plaidConfigured ? "configured" : "not_configured",
+      plaid: plaidConfig.configured ? "configured" : "not_configured",
+      plaidConfig,
       bureauCredentials: await getBureauStatus(),
       oauth: oauthConfigured ? "configured" : "not_configured",
     },
@@ -386,6 +388,8 @@ app.use((req, res, next) => {
     "/admin-overrides",
     "/automation",
     "/bureau/configure",
+    "/plaid/config",
+    "/plaid/test",
     "/config",
     "/credit-monitor/config",
     "/document-room",

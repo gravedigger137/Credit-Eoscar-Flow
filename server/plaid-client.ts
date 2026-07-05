@@ -1,34 +1,56 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from "plaid";
+import { storage } from "./storage";
+import { getPlaidRuntimeConfig } from "./provider-config";
 
 let plaidClient: PlaidApi | null = null;
+let plaidClientCacheKey: string | null = null;
 
-function getPlaidClient(): PlaidApi | null {
-  if (plaidClient) return plaidClient;
-  const clientId = process.env.PLAID_CLIENT_ID;
-  const secret = process.env.PLAID_SECRET;
-  if (!clientId || !secret) return null;
+function normalizeProducts(products: string[]) {
+  const supported = new Set(Object.values(Products) as string[]);
+  const normalized = products
+    .map((product) => product.trim().toLowerCase())
+    .filter((product) => supported.has(product));
+
+  return normalized.length > 0
+    ? normalized.map((product) => product as Products)
+    : [Products.Auth, Products.Transactions, Products.Identity, Products.Liabilities];
+}
+
+async function getPlaidClient(): Promise<PlaidApi | null> {
+  const runtimeConfig = await getPlaidRuntimeConfig(storage);
+  if (!runtimeConfig || !runtimeConfig.enabled || ["disabled", "inactive"].includes(runtimeConfig.status)) return null;
+
+  const cacheKey = [
+    runtimeConfig.source,
+    runtimeConfig.environment,
+    runtimeConfig.clientId,
+    runtimeConfig.secret,
+  ].join(":");
+  if (plaidClient && plaidClientCacheKey === cacheKey) return plaidClient;
 
   const config = new Configuration({
-    basePath: PlaidEnvironments[process.env.PLAID_ENV || "sandbox"],
+    basePath: PlaidEnvironments[runtimeConfig.environment],
     baseOptions: {
       headers: {
-        "PLAID-CLIENT-ID": clientId,
-        "PLAID-SECRET": secret,
+        "PLAID-CLIENT-ID": runtimeConfig.clientId,
+        "PLAID-SECRET": runtimeConfig.secret,
       },
     },
   });
   plaidClient = new PlaidApi(config);
+  plaidClientCacheKey = cacheKey;
   return plaidClient;
 }
 
 export async function createLinkToken(clientUserId: string) {
-  const client = getPlaidClient();
+  const client = await getPlaidClient();
   if (!client) return { error: "Plaid not configured. Add PLAID_CLIENT_ID and PLAID_SECRET." };
+  const runtimeConfig = await getPlaidRuntimeConfig(storage);
 
   const response = await client.linkTokenCreate({
     user: { client_user_id: clientUserId },
     client_name: "CreditRepair Pro",
-    products: [Products.Auth, Products.Transactions, Products.Identity, Products.Liabilities],
+    products: normalizeProducts(runtimeConfig?.products || []),
     country_codes: [CountryCode.Us],
     language: "en",
   });
@@ -36,7 +58,7 @@ export async function createLinkToken(clientUserId: string) {
 }
 
 export async function exchangePublicToken(publicToken: string) {
-  const client = getPlaidClient();
+  const client = await getPlaidClient();
   if (!client) return { error: "Plaid not configured" };
 
   const response = await client.itemPublicTokenExchange({ public_token: publicToken });
@@ -47,7 +69,7 @@ export async function exchangePublicToken(publicToken: string) {
 }
 
 export async function getAccounts(accessToken: string) {
-  const client = getPlaidClient();
+  const client = await getPlaidClient();
   if (!client) return { error: "Plaid not configured" };
 
   const response = await client.accountsGet({ access_token: accessToken });
@@ -68,7 +90,7 @@ export async function getAccounts(accessToken: string) {
 }
 
 export async function getTransactions(accessToken: string, startDate: string, endDate: string) {
-  const client = getPlaidClient();
+  const client = await getPlaidClient();
   if (!client) return { error: "Plaid not configured" };
 
   const response = await client.transactionsGet({
@@ -81,7 +103,7 @@ export async function getTransactions(accessToken: string, startDate: string, en
 }
 
 export async function getIdentity(accessToken: string) {
-  const client = getPlaidClient();
+  const client = await getPlaidClient();
   if (!client) return { error: "Plaid not configured" };
 
   const response = await client.identityGet({ access_token: accessToken });
@@ -89,7 +111,7 @@ export async function getIdentity(accessToken: string) {
 }
 
 export async function getLiabilities(accessToken: string) {
-  const client = getPlaidClient();
+  const client = await getPlaidClient();
   if (!client) return { error: "Plaid not configured" };
 
   const response = await client.liabilitiesGet({ access_token: accessToken });
@@ -100,6 +122,7 @@ export async function getLiabilities(accessToken: string) {
   };
 }
 
-export function isPlaidConfigured(): boolean {
-  return !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+export async function isPlaidConfigured(): Promise<boolean> {
+  const status = await getPlaidRuntimeConfig(storage);
+  return !!status && status.enabled && !["disabled", "inactive"].includes(status.status);
 }

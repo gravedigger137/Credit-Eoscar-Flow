@@ -141,6 +141,39 @@ const BOT_CONFIG = [
   { type: "bot_api_monitor", icon: Globe, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", category: "development" },
 ];
 
+type PlaidEnvironment = "sandbox" | "development" | "production";
+
+interface PlaidConfigStatus {
+  configured: boolean;
+  environment: PlaidEnvironment | "unknown";
+  enabled: boolean;
+  status: string;
+  source: "stored" | "environment" | "none";
+  products: string[];
+  clientIdMasked: string | null;
+  secretMasked: string | null;
+  hasClientId: boolean;
+  hasSecret: boolean;
+}
+
+function parseProducts(value: string) {
+  return value
+    .split(",")
+    .map((product) => product.trim())
+    .filter(Boolean);
+}
+
+function describeApiError(error: unknown) {
+  const message = error instanceof Error ? error.message : "Request failed";
+  const json = message.replace(/^\d+:\s*/, "");
+  try {
+    const parsed = JSON.parse(json);
+    return parsed.message || message;
+  } catch {
+    return message;
+  }
+}
+
 function BotCommandCenter() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -397,6 +430,13 @@ export default function Settings() {
   const [businessEmail, setBusinessEmail] = useState("support@creditrepairpro.com");
   const [businessName, setBusinessName] = useState("CreditRepair Pro LLC");
   const [croaReg, setCroaReg] = useState("CR-2023-8891");
+  const [plaidForm, setPlaidForm] = useState({
+    clientId: "",
+    secret: "",
+    environment: "sandbox" as PlaidEnvironment,
+    products: "auth,transactions,identity,liabilities",
+    enabled: true,
+  });
 
   const [overrides, setOverrides] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -469,6 +509,60 @@ export default function Settings() {
     mutationFn: (data: { key: string; value: string }) => apiRequest("POST", "/api/config", data),
     onSuccess: () => toast({ title: "Configuration saved!" }),
     onError: () => toast({ title: "Error saving config", variant: "destructive" }),
+  });
+
+  const { data: plaidConfig } = useQuery<PlaidConfigStatus>({
+    queryKey: ["/api/plaid/config"],
+    enabled: user?.role === "admin",
+  });
+
+  useEffect(() => {
+    if (!plaidConfig) return;
+    setPlaidForm(prev => ({
+      ...prev,
+      environment: plaidConfig.environment === "unknown" ? prev.environment : plaidConfig.environment,
+      products: plaidConfig.products?.length ? plaidConfig.products.join(",") : prev.products,
+      enabled: plaidConfig.enabled,
+    }));
+  }, [plaidConfig]);
+
+  const canReuseStoredPlaidValues = plaidConfig?.source === "stored";
+  const canSavePlaid = !!(
+    (plaidForm.clientId.trim() || (canReuseStoredPlaidValues && plaidConfig?.hasClientId)) &&
+    (plaidForm.secret.trim() || (canReuseStoredPlaidValues && plaidConfig?.hasSecret)) &&
+    plaidForm.environment
+  );
+
+  const savePlaid = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/plaid/config", {
+        clientId: plaidForm.clientId,
+        secret: plaidForm.secret,
+        environment: plaidForm.environment,
+        products: parseProducts(plaidForm.products),
+        enabled: plaidForm.enabled,
+        status: plaidForm.enabled ? "active" : "disabled",
+      });
+      return response.json();
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["/api/plaid/config"] }),
+        qc.invalidateQueries({ queryKey: ["/api/plaid/status"] }),
+      ]);
+      setPlaidForm(prev => ({ ...prev, clientId: "", secret: "" }));
+      toast({ title: "Plaid configuration saved", description: "Credentials were stored securely and will be masked on retrieval." });
+    },
+    onError: (error) => toast({ title: "Plaid save failed", description: describeApiError(error), variant: "destructive" }),
+  });
+
+  const testPlaid = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/plaid/test");
+      return response.json();
+    },
+    onSuccess: (data: any) => toast({ title: "Plaid configuration ready", description: data.message }),
+    onError: (error) => toast({ title: "Plaid test failed", description: describeApiError(error), variant: "destructive" }),
   });
 
   const activeCount = Object.values(overrides).filter(Boolean).length;
@@ -634,21 +728,70 @@ export default function Settings() {
             {/* Plaid Banking */}
             <Card className="glass-panel border-l-4 border-l-blue-500">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Building className="w-5 h-5 text-blue-500" /> Plaid Banking Integration</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2"><Building className="w-5 h-5 text-blue-500" /> Plaid Banking Integration</CardTitle>
+                  <Badge variant={plaidConfig?.configured ? "outline" : "secondary"} className={plaidConfig?.configured ? "border-blue-500 text-blue-500" : ""}>
+                    {plaidConfig?.configured ? `Configured (${plaidConfig.source})` : "Not configured"}
+                  </Badge>
+                </div>
                 <CardDescription>Connect client bank accounts for identity verification, income analysis, liability tracking, and automated ACH payments.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2"><Label>Plaid Client ID</Label><Input placeholder="Enter Plaid Client ID" data-testid="input-plaid-client-id" onChange={e => (window as any).__plaidClientId = e.target.value} /></div>
-                  <div className="space-y-2"><Label>Plaid Secret</Label><Input type="password" placeholder="Enter Plaid Secret" data-testid="input-plaid-secret" onChange={e => (window as any).__plaidSecret = e.target.value} /></div>
+                  <div className="space-y-2">
+                    <Label>Plaid Client ID</Label>
+                    <Input
+                      placeholder={plaidConfig?.clientIdMasked ? `${plaidConfig.source === "stored" ? "Saved" : "Configured"}: ${plaidConfig.clientIdMasked}` : "Enter Plaid Client ID"}
+                      data-testid="input-plaid-client-id"
+                      value={plaidForm.clientId}
+                      onChange={e => setPlaidForm(prev => ({ ...prev, clientId: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Plaid Secret</Label>
+                    <Input
+                      type="password"
+                      placeholder={plaidConfig?.secretMasked ? `${plaidConfig.source === "stored" ? "Saved" : "Configured"}: ${plaidConfig.secretMasked}` : "Enter Plaid Secret"}
+                      data-testid="input-plaid-secret"
+                      value={plaidForm.secret}
+                      onChange={e => setPlaidForm(prev => ({ ...prev, secret: e.target.value }))}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Environment</Label>
-                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-plaid-env" onChange={e => (window as any).__plaidEnv = e.target.value}>
-                    <option value="sandbox">Sandbox (Testing)</option>
-                    <option value="development">Development</option>
-                    <option value="production">Production</option>
-                  </select>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Environment</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      data-testid="select-plaid-env"
+                      value={plaidForm.environment}
+                      onChange={e => setPlaidForm(prev => ({ ...prev, environment: e.target.value as PlaidEnvironment }))}
+                    >
+                      <option value="sandbox">Sandbox (Testing)</option>
+                      <option value="development">Development</option>
+                      <option value="production">Production</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Products</Label>
+                    <Input
+                      placeholder="auth,transactions,identity,liabilities"
+                      data-testid="input-plaid-products"
+                      value={plaidForm.products}
+                      onChange={e => setPlaidForm(prev => ({ ...prev, products: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border">
+                  <div>
+                    <Label className="text-base">Provider Enabled</Label>
+                    <p className="text-sm text-muted-foreground">When disabled, Plaid account-linking uses manual mode.</p>
+                  </div>
+                  <Switch
+                    checked={plaidForm.enabled}
+                    onCheckedChange={checked => setPlaidForm(prev => ({ ...prev, enabled: checked }))}
+                    data-testid="switch-plaid-enabled"
+                  />
                 </div>
                 <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-sm">
                   <p className="font-medium text-blue-700 dark:text-blue-300">How to get Plaid credentials:</p>
@@ -660,14 +803,22 @@ export default function Settings() {
                   </ol>
                 </div>
               </CardContent>
-              <CardFooter className="border-t border-border/50 px-6 py-4">
-                <Button onClick={() => {
-                  const id = (window as any).__plaidClientId; const sec = (window as any).__plaidSecret; const env = (window as any).__plaidEnv || "sandbox";
-                  if (id) saveConfig.mutate({ key: "plaid_client_id", value: id });
-                  if (sec) saveConfig.mutate({ key: "plaid_secret", value: sec });
-                  saveConfig.mutate({ key: "plaid_env", value: env });
-                  toast({ title: "Plaid configuration saved!" });
-                }}><Save className="w-4 h-4 mr-2" />Save Plaid Config</Button>
+              <CardFooter className="border-t border-border/50 px-6 py-4 flex gap-2">
+                <Button
+                  onClick={() => savePlaid.mutate()}
+                  disabled={!canSavePlaid || savePlaid.isPending}
+                  data-testid="button-save-plaid-config"
+                >
+                  <Save className="w-4 h-4 mr-2" />{savePlaid.isPending ? "Saving..." : "Save Plaid Config"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => testPlaid.mutate()}
+                  disabled={!plaidConfig?.configured || testPlaid.isPending}
+                  data-testid="button-test-plaid-config"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />{testPlaid.isPending ? "Testing..." : "Test Connection"}
+                </Button>
               </CardFooter>
             </Card>
 

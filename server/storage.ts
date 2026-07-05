@@ -17,6 +17,11 @@ import {
   type ClientDocument, type InsertClientDocument,
 } from "@shared/schema";
 import { decryptIfEncrypted, encryptIfSensitive } from "./secret-store";
+import {
+  mapClientCreatedToPlatformEvent,
+  safelyPublishPlatformEvent,
+  safelyRouteNotificationThroughPlatform,
+} from "./platform";
 
 function decryptClient<T extends { ssn?: string | null }>(client: T): T {
   if (!client?.ssn) return client;
@@ -141,7 +146,16 @@ export class DatabaseStorage implements IStorage {
   }
   async createClient(client: InsertClient) {
     const [c] = await db.insert(clients).values(encryptClientInput(client)).returning();
-    return decryptClient(c);
+    const created = decryptClient(c);
+    safelyPublishPlatformEvent(mapClientCreatedToPlatformEvent({
+      clientId: created.id,
+      firstName: created.firstName,
+      lastName: created.lastName,
+      email: created.email,
+      status: created.status,
+      ...(created.createdAt === null ? {} : { createdAt: created.createdAt ?? undefined })
+    }));
+    return created;
   }
   async updateClient(id: string, data: Partial<InsertClient>) {
     const [c] = await db.update(clients).set(encryptClientInput(data)).where(eq(clients.id, id)).returning();
@@ -260,6 +274,7 @@ export class DatabaseStorage implements IStorage {
   }
   async createNotification(n: InsertNotification) {
     const [notif] = await db.insert(notifications).values(n).returning();
+    safelyRouteNotificationThroughPlatform(notif);
     return notif;
   }
   async markNotificationRead(id: string) {

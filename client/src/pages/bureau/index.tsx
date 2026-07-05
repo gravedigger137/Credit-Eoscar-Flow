@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, csrfFetch } from "@/lib/queryClient";
+import { apiRequest, csrfFetch, queryClient } from "@/lib/queryClient";
 import { useState, useRef } from "react";
 import {
   FileUp, Shield, Zap, TrendingUp, AlertTriangle, CheckCircle2, XCircle,
@@ -68,6 +68,64 @@ const actionTypes = [
   { value: "dispute_inaccuracy", label: "Dispute Inaccurate Item", icon: Shield },
 ];
 
+type BureauId = "equifax" | "experian" | "transunion" | "innovis";
+
+interface BureauConfigForm {
+  apiKey: string;
+  apiSecret: string;
+  clientId: string;
+  clientSecret: string;
+  memberId: string;
+  environment: "sandbox" | "production";
+  tokenUrl: string;
+  baseUrl: string;
+  productName: string;
+  apiName: string;
+  enabled: boolean;
+  status: "active" | "disabled";
+}
+
+function experianUrls(environment: BureauConfigForm["environment"]) {
+  const baseUrl = environment === "production"
+    ? "https://us-api.experian.com"
+    : "https://sandbox-us-api.experian.com";
+  return {
+    baseUrl,
+    tokenUrl: `${baseUrl}/oauth2/v1/token`,
+  };
+}
+
+function createConfigForm(bureau: BureauId): BureauConfigForm {
+  const experian = experianUrls("sandbox");
+  return {
+    apiKey: "",
+    apiSecret: "",
+    clientId: "",
+    clientSecret: "",
+    memberId: "",
+    environment: "sandbox",
+    tokenUrl: bureau === "experian" ? experian.tokenUrl : "",
+    baseUrl: bureau === "experian" ? experian.baseUrl : "",
+    productName: bureau === "experian" ? "Consumer Credit Profile" : "",
+    apiName: bureau === "experian" ? "consumer-credit-profile" : "",
+    enabled: true,
+    status: "active",
+  };
+}
+
+function applyEnvironmentDefaults(bureau: BureauId, form: BureauConfigForm, environment: BureauConfigForm["environment"]): BureauConfigForm {
+  if (bureau !== "experian") return { ...form, environment };
+  const urls = experianUrls(environment);
+  return { ...form, environment, ...urls };
+}
+
+function canSaveConfig(bureau: BureauId, form: BureauConfigForm) {
+  if (bureau === "experian") {
+    return !!(form.clientId && form.clientSecret && form.tokenUrl && form.baseUrl && (form.productName || form.apiName));
+  }
+  return !!form.apiKey;
+}
+
 function ScoreGauge({ score, label, size = "lg" }: { score: number; label: string; size?: "sm" | "lg" }) {
   const color = score >= 740 ? "text-green-500" : score >= 670 ? "text-yellow-500" : score >= 580 ? "text-orange-500" : "text-red-500";
   const bg = score >= 740 ? "bg-green-500/10" : score >= 670 ? "bg-yellow-500/10" : score >= 580 ? "bg-orange-500/10" : "bg-red-500/10";
@@ -89,8 +147,8 @@ export default function Bureau() {
   const [factors, setFactors] = useState(defaultFactors);
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [configOpen, setConfigOpen] = useState(false);
-  const [configBureau, setConfigBureau] = useState("equifax");
-  const [configForm, setConfigForm] = useState({ apiKey: "", apiSecret: "", clientId: "", memberId: "", environment: "sandbox" });
+  const [configBureau, setConfigBureau] = useState<BureauId>("equifax");
+  const [configForm, setConfigForm] = useState<BureauConfigForm>(() => createConfigForm("equifax"));
 
   const { data: bureauStatus } = useQuery<Record<string, { configured: boolean; environment: string }>>({
     queryKey: ["/api/bureau/status-all"],
@@ -148,13 +206,19 @@ export default function Bureau() {
 
   const configureMutation = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("POST", "/api/bureau/configure", { bureau: configBureau, ...configForm });
+      const r = await apiRequest("POST", "/api/bureau/configure", {
+        provider: configBureau,
+        bureau: configBureau,
+        ...configForm,
+      });
       return r.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/bureau/status-all"] });
       toast({ title: "Saved", description: `${configBureau} credentials configured` });
       setConfigOpen(false);
     },
+    onError: (e: any) => toast({ title: "Save Error", description: e.message, variant: "destructive" }),
   });
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -526,7 +590,7 @@ export default function Bureau() {
                     <Button
                       variant="outline"
                       className="w-full"
-                      onClick={() => { setConfigBureau(bureau); setConfigForm({ apiKey: "", apiSecret: "", clientId: "", memberId: "", environment: "sandbox" }); setConfigOpen(true); }}
+                      onClick={() => { setConfigBureau(bureau); setConfigForm(createConfigForm(bureau)); setConfigOpen(true); }}
                       data-testid={`button-configure-${bureau}`}
                     >
                       <Settings2 className="w-4 h-4 mr-2" />
@@ -594,11 +658,22 @@ export default function Bureau() {
             <DialogDescription>Enter your API credentials for {configBureau}. These are stored securely and used only for credit report pulls.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div><Label>API Key / Client Secret</Label><Input type="password" value={configForm.apiKey} onChange={e => setConfigForm(f => ({ ...f, apiKey: e.target.value }))} data-testid="input-api-key" /></div>
+            {configBureau === "experian" ? (
+              <>
+                <div><Label>Client ID</Label><Input value={configForm.clientId} onChange={e => setConfigForm(f => ({ ...f, clientId: e.target.value }))} data-testid="input-client-id" /></div>
+                <div><Label>Client Secret</Label><Input type="password" value={configForm.clientSecret} onChange={e => setConfigForm(f => ({ ...f, clientSecret: e.target.value }))} data-testid="input-client-secret" /></div>
+                <div><Label>Token URL</Label><Input value={configForm.tokenUrl} onChange={e => setConfigForm(f => ({ ...f, tokenUrl: e.target.value }))} data-testid="input-token-url" /></div>
+                <div><Label>Base URL</Label><Input value={configForm.baseUrl} onChange={e => setConfigForm(f => ({ ...f, baseUrl: e.target.value }))} data-testid="input-base-url" /></div>
+                <div><Label>Product Name</Label><Input value={configForm.productName} onChange={e => setConfigForm(f => ({ ...f, productName: e.target.value }))} data-testid="input-product-name" /></div>
+                <div><Label>API Name</Label><Input value={configForm.apiName} onChange={e => setConfigForm(f => ({ ...f, apiName: e.target.value }))} data-testid="input-api-name" /></div>
+              </>
+            ) : (
+              <div><Label>API Key / Client Secret</Label><Input type="password" value={configForm.apiKey} onChange={e => setConfigForm(f => ({ ...f, apiKey: e.target.value }))} data-testid="input-api-key" /></div>
+            )}
             {configBureau === "equifax" && (
               <div><Label>API Secret</Label><Input type="password" value={configForm.apiSecret} onChange={e => setConfigForm(f => ({ ...f, apiSecret: e.target.value }))} /></div>
             )}
-            {(configBureau === "experian" || configBureau === "equifax") && (
+            {configBureau === "equifax" && (
               <div><Label>Client ID</Label><Input value={configForm.clientId} onChange={e => setConfigForm(f => ({ ...f, clientId: e.target.value }))} /></div>
             )}
             {(configBureau === "transunion" || configBureau === "innovis") && (
@@ -606,7 +681,7 @@ export default function Bureau() {
             )}
             <div>
               <Label>Environment</Label>
-              <Select value={configForm.environment} onValueChange={v => setConfigForm(f => ({ ...f, environment: v }))}>
+              <Select value={configForm.environment} onValueChange={v => setConfigForm(f => applyEnvironmentDefaults(configBureau, f, v as BureauConfigForm["environment"]))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
@@ -614,10 +689,23 @@ export default function Bureau() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Status</Label>
+              <Select
+                value={configForm.status}
+                onValueChange={v => setConfigForm(f => ({ ...f, status: v as BureauConfigForm["status"], enabled: v === "active" }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Enabled</SelectItem>
+                  <SelectItem value="disabled">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfigOpen(false)}>Cancel</Button>
-            <Button onClick={() => configureMutation.mutate()} disabled={!configForm.apiKey || configureMutation.isPending} data-testid="button-save-config">
+            <Button onClick={() => configureMutation.mutate()} disabled={!canSaveConfig(configBureau, configForm) || configureMutation.isPending} data-testid="button-save-config">
               {configureMutation.isPending ? "Saving..." : "Save Credentials"}
             </Button>
           </DialogFooter>

@@ -88,6 +88,11 @@ import { getPublicAppUrl } from "./config";
 import { decryptIfEncrypted, encryptIfSensitive, isSensitiveConfigKey, maskSecret } from "./secret-store";
 import { rateLimit } from "./rate-limit";
 import { maskLast4, safeErrorMessage } from "./security-utils";
+import {
+  BureauApiConfigValidationError,
+  getAllBureauConfigStatuses,
+  saveBureauApiConfig,
+} from "./bureau-api-config";
 
 const execFileAsync = promisify(execFile);
 
@@ -1485,31 +1490,24 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
 
   app.get("/bureau/status", async (_req, res) => {
     try {
-      const bureaus = ["equifax", "experian", "transunion"] as const;
-      const status: Record<string, { configured: boolean; environment: string }> = {};
-      for (const b of bureaus) {
-        const key = await storage.getApiConfig(`${b}_api_key`);
-        const env = await storage.getApiConfig(`${b}_environment`) || "sandbox";
-        status[b] = { configured: !!key, environment: env };
-      }
-      res.json(status);
+      const statuses = await getAllBureauConfigStatuses(storage);
+      res.json({
+        equifax: statuses.equifax,
+        experian: statuses.experian,
+        transunion: statuses.transunion,
+      });
     } catch (e) { handleError(res, e); }
   });
 
   app.post("/bureau/configure", async (req, res) => {
     try {
-      const { bureau, apiKey, apiSecret, clientId, memberId, environment } = req.body;
-      if (!bureau || !apiKey) return res.status(400).json({ message: "Bureau and API key required" });
-      if (!["equifax", "experian", "transunion", "innovis"].includes(bureau)) return res.status(400).json({ message: "Invalid bureau" });
-
-      await storage.setApiConfig(`${bureau}_api_key`, apiKey);
-      if (apiSecret) await storage.setApiConfig(`${bureau}_api_secret`, apiSecret);
-      if (clientId) await storage.setApiConfig(`${bureau}_client_id`, clientId);
-      if (memberId) await storage.setApiConfig(`${bureau}_member_id`, memberId);
-      await storage.setApiConfig(`${bureau}_environment`, environment || "sandbox");
-
-      res.json({ success: true, message: `${bureau} credentials saved` });
-    } catch (e) { handleError(res, e); }
+      res.json(await saveBureauApiConfig(req.body, storage));
+    } catch (e) {
+      if (e instanceof BureauApiConfigValidationError) {
+        return res.status(400).json({ message: e.message, errors: e.fields });
+      }
+      handleError(res, e);
+    }
   });
 
   // ─── SCORE SIMULATOR ROUTES ─────────────────────────────────────────────────
@@ -2196,14 +2194,7 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
 
   app.get("/bureau/status-all", async (_req, res) => {
     try {
-      const bureaus = ["equifax", "experian", "transunion", "innovis"] as const;
-      const status: Record<string, { configured: boolean; environment: string }> = {};
-      for (const b of bureaus) {
-        const key = await storage.getApiConfig(`${b}_api_key`);
-        const env = await storage.getApiConfig(`${b}_environment`) || "sandbox";
-        status[b] = { configured: !!key, environment: env };
-      }
-      res.json(status);
+      res.json(await getAllBureauConfigStatuses(storage));
     } catch (e) { handleError(res, e); }
   });
 

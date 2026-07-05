@@ -16,6 +16,7 @@ import {
   type InsertLegalInstrument,
   type InsertReceivableReadinessRecord,
 } from "@shared/schema";
+import { mapAuditLoggedToPlatformEvent, safelyPublishPlatformEvent } from "./platform";
 
 type Actor = { userId?: string | null };
 type Confirmable = { confirmationText?: string; reason?: string };
@@ -48,6 +49,13 @@ function requireConfirmation(data: Record<string, unknown>, confirmationText?: s
 
 async function recordAudit(event: InsertAuditEvent) {
   const [audit] = await db.insert(auditEvents).values(event as typeof auditEvents.$inferInsert).returning();
+  safelyPublishPlatformEvent(mapAuditLoggedToPlatformEvent({
+    auditId: audit.id,
+    action: audit.action,
+    entityType: audit.entityType,
+    entityId: audit.entityId ?? "",
+    ...(audit.createdAt === null ? {} : { createdAt: audit.createdAt ?? undefined }),
+  }));
   return audit;
 }
 

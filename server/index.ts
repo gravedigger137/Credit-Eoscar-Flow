@@ -21,6 +21,7 @@ import { csrfProtection, csrfTokenHandler } from "./csrf";
 import { getRateLimitStatus, rateLimit } from "./rate-limit";
 import { redactSensitiveText, safeErrorMessage } from "./security-utils";
 import { getAIProviderStatus } from "./services/ai.service";
+import { getAllBureauConfigStatuses } from "./bureau-api-config";
 
 const app = express();
 const httpServer = createServer(app);
@@ -113,28 +114,29 @@ app.get("/ready", async (_req, res) => {
 });
 
 async function getBureauStatus() {
-  const bureaus = ["equifax", "experian", "transunion", "innovis"] as const;
-  const result: Record<string, { configured: boolean; environment: string }> = {};
-
   try {
-    for (const bureau of bureaus) {
-      const apiKey = await storage.getApiConfig(`${bureau}_api_key`);
-      const environment = await storage.getApiConfig(`${bureau}_environment`);
-      result[bureau] = {
-        configured: !!apiKey,
-        environment: environment || "sandbox",
-      };
-    }
+    return await getAllBureauConfigStatuses(storage);
   } catch {
-    for (const bureau of bureaus) {
-      result[bureau] = {
+    const bureaus = ["equifax", "experian", "transunion", "innovis"] as const;
+    return Object.fromEntries(
+      bureaus.map((bureau) => [bureau, {
+        provider: bureau,
         configured: false,
         environment: "unknown",
-      };
-    }
+        enabled: false,
+        status: "unknown",
+        apiName: null,
+        productName: null,
+        tokenUrl: null,
+        baseUrl: null,
+        clientIdMasked: null,
+        clientSecretMasked: null,
+        apiKeyMasked: null,
+        memberIdMasked: null,
+        hasClientSecret: false,
+      }]),
+    );
   }
-
-  return result;
 }
 
 async function integrationStatus() {

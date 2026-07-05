@@ -10,8 +10,13 @@ export interface BureauCredentials {
   apiKey: string;
   apiSecret?: string;
   clientId?: string;
+  clientSecret?: string;
   memberId?: string;
   environment: "sandbox" | "production";
+  tokenUrl?: string;
+  baseUrl?: string;
+  productName?: string;
+  apiName?: string;
 }
 
 export interface BureauReportRequest {
@@ -128,19 +133,21 @@ export class ExperianClient {
   private apiKey: string;
   private clientId: string;
   private baseUrl: string;
+  private tokenUrl: string;
   private accessToken: string | null = null;
 
   constructor(credentials: BureauCredentials) {
-    this.apiKey = credentials.apiKey;
+    this.apiKey = credentials.clientSecret || credentials.apiKey;
     this.clientId = credentials.clientId || "";
-    this.baseUrl = credentials.environment === "production"
+    this.baseUrl = credentials.baseUrl || (credentials.environment === "production"
       ? "https://us-api.experian.com"
-      : "https://sandbox-us-api.experian.com";
+      : "https://sandbox-us-api.experian.com");
+    this.tokenUrl = credentials.tokenUrl || `${this.baseUrl}/oauth2/v1/token`;
   }
 
   async authenticate(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/oauth2/v1/token`, {
+      const response = await fetch(this.tokenUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -363,15 +370,36 @@ export class CBCInnovisClient {
 // ─── FACTORY ────────────────────────────────────────────────────────────────
 
 export async function getBureauClient(bureau: "equifax" | "experian" | "transunion" | "innovis"): Promise<EquifaxClient | ExperianClient | TransUnionClient | CBCInnovisClient | null> {
-  const apiKey = await storage.getApiConfig(`${bureau}_api_key`);
-  if (!apiKey) return null;
+  const enabled = await storage.getApiConfig(`bureau_${bureau}_enabled`);
+  const status = await storage.getApiConfig(`bureau_${bureau}_status`);
+  if (["false", "0", "disabled", "inactive"].includes((enabled || "").toLowerCase())) return null;
+  if (["disabled", "inactive"].includes((status || "").toLowerCase())) return null;
 
+  const apiKey = await storage.getApiConfig(`${bureau}_api_key`);
   const apiSecret = await storage.getApiConfig(`${bureau}_api_secret`);
   const clientId = await storage.getApiConfig(`${bureau}_client_id`);
+  const clientSecret = await storage.getApiConfig(`bureau_${bureau}_client_secret`) || await storage.getApiConfig(`${bureau}_client_secret`);
   const memberId = await storage.getApiConfig(`${bureau}_member_id`);
   const env = (await storage.getApiConfig(`${bureau}_environment`)) as "sandbox" | "production" || "sandbox";
+  const baseUrl = await storage.getApiConfig(`bureau_${bureau}_base_url`);
+  const tokenUrl = await storage.getApiConfig(`bureau_${bureau}_token_url`);
+  const productName = await storage.getApiConfig(`bureau_${bureau}_product_name`);
+  const apiName = await storage.getApiConfig(`bureau_${bureau}_api_name`);
 
-  const creds: BureauCredentials = { apiKey, apiSecret: apiSecret || undefined, clientId: clientId || undefined, memberId: memberId || undefined, environment: env };
+  if (!apiKey && !(bureau === "experian" && clientSecret)) return null;
+
+  const creds: BureauCredentials = {
+    apiKey: apiKey || clientSecret || "",
+    apiSecret: apiSecret || undefined,
+    clientId: clientId || undefined,
+    clientSecret: clientSecret || undefined,
+    memberId: memberId || undefined,
+    environment: env,
+    baseUrl: baseUrl || undefined,
+    tokenUrl: tokenUrl || undefined,
+    productName: productName || undefined,
+    apiName: apiName || undefined,
+  };
 
   switch (bureau) {
     case "equifax": return new EquifaxClient(creds);

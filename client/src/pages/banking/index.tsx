@@ -15,8 +15,77 @@ import { AdminBypassBanner } from "@/components/admin-bypass-banner";
 import {
   Landmark, CreditCard, Building2, TrendingUp, DollarSign, RefreshCw, Plus,
   CheckCircle2, XCircle, Wallet, PiggyBank, FileText, Shield, Trash2,
-  ArrowUpRight, ArrowDownLeft, Eye
+  ArrowUpRight, ArrowDownLeft, Eye, Link
 } from "lucide-react";
+
+interface PlaidLinkMetadata {
+  institution?: {
+    name?: string;
+    institution_id?: string;
+  };
+}
+
+interface PlaidLinkError {
+  error_code?: string;
+  error_message?: string;
+  display_message?: string;
+}
+
+interface PlaidHandler {
+  open: () => void;
+  exit: () => void;
+}
+
+interface PlaidCreateOptions {
+  token: string;
+  onSuccess: (publicToken: string, metadata: PlaidLinkMetadata) => void;
+  onExit: (error: PlaidLinkError | null, metadata: PlaidLinkMetadata) => void;
+}
+
+declare global {
+  interface Window {
+    Plaid?: {
+      create: (options: PlaidCreateOptions) => PlaidHandler;
+    };
+  }
+}
+
+let plaidScriptPromise: Promise<void> | null = null;
+
+function loadPlaidScript() {
+  if (window.Plaid) return Promise.resolve();
+  if (plaidScriptPromise) return plaidScriptPromise;
+
+  plaidScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.getElementById("plaid-link-script") as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Unable to load Plaid Link")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = "plaid-link-script";
+    script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Plaid Link"));
+    document.head.appendChild(script);
+  });
+
+  return plaidScriptPromise;
+}
+
+function apiErrorMessage(error: unknown, fallback = "Request failed") {
+  const raw = error instanceof Error ? error.message : fallback;
+  const json = raw.replace(/^\d+:\s*/, "");
+  try {
+    const parsed = JSON.parse(json);
+    return parsed.message || parsed.error || raw;
+  } catch {
+    return raw;
+  }
+}
 
 export default function Banking() {
   const { toast } = useToast();
@@ -29,6 +98,8 @@ export default function Banking() {
 
   const [loanForm, setLoanForm] = useState({ clientId: "", loanType: "personal", amount: "", termMonths: "", lender: "" });
   const [showAddAccount, setShowAddAccount] = useState(false);
+  const [linkMode, setLinkMode] = useState<"plaid" | "manual">("plaid");
+  const [isPlaidOpening, setIsPlaidOpening] = useState(false);
   const [accountForm, setAccountForm] = useState({
     clientId: "", institutionName: "", accountName: "", accountType: "checking",
     accountSubtype: "", mask: "", balanceCurrent: "", balanceAvailable: "", balanceLimit: "",
@@ -64,6 +135,33 @@ export default function Banking() {
     mutationFn: async (id: string) => { const res = await apiRequest("POST", `/api/bank-accounts/${id}/sync`); return res.json(); },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/bank-accounts"] }); toast({ title: "Account Synced" }); },
     onError: () => toast({ title: "Sync Failed", description: "Plaid credentials may not be configured for this account.", variant: "destructive" }),
+  });
+
+  const exchangePlaidToken = useMutation({
+    mutationFn: async ({ publicToken, metadata }: { publicToken: string; metadata: PlaidLinkMetadata }) => {
+      const res = await apiRequest("POST", "/api/plaid/exchange-token", {
+        publicToken,
+        clientId: accountForm.clientId,
+        institutionName: metadata.institution?.name,
+        institutionId: metadata.institution?.institution_id,
+      });
+      return res.json();
+    },
+    onSuccess: async (data: any) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["/api/bank-accounts"] }),
+        qc.invalidateQueries({ queryKey: ["/api/plaid/status"] }),
+      ]);
+      const count = Array.isArray(data?.accounts) ? data.accounts.length : 0;
+      toast({
+        title: "Bank account linked",
+        description: count > 0 ? `${count} account${count === 1 ? "" : "s"} imported from Plaid.` : "Plaid returned no accounts.",
+      });
+      setShowAddAccount(false);
+      setLinkMode("plaid");
+      setAccountForm({ clientId: "", institutionName: "", accountName: "", accountType: "checking", accountSubtype: "", mask: "", balanceCurrent: "", balanceAvailable: "", balanceLimit: "" });
+    },
+    onError: (error) => toast({ title: "Plaid token exchange failed", description: apiErrorMessage(error), variant: "destructive" }),
   });
 
   const createLoan = useMutation({
@@ -102,6 +200,47 @@ export default function Banking() {
     const c = clients.find((cl: any) => cl.id === clientId);
     return c ? `${c.firstName} ${c.lastName}` : clientId?.slice(0, 8);
   };
+
+  const startPlaidLink = async () => {
+    if (!accountForm.clientId) {
+      toast({ title: "Select a client first", description: "Plaid accounts must be tied to a selected client.", variant: "destructive" });
+      return;
+    }
+
+    setIsPlaidOpening(true);
+    try {
+      const tokenResponse = await apiRequest("POST", "/api/plaid/create-link-token", { clientId: accountForm.clientId });
+      const tokenData = await tokenResponse.json();
+      if (!tokenData?.linkToken) throw new Error(tokenData?.message || "Plaid link token was not returned");
+
+      await loadPlaidScript();
+      if (!window.Plaid) throw new Error("Plaid Link did not initialize");
+
+      const handler = window.Plaid.create({
+        token: tokenData.linkToken,
+        onSuccess: (publicToken, metadata) => {
+          exchangePlaidToken.mutate({ publicToken, metadata });
+        },
+        onExit: (error) => {
+          if (error) {
+            toast({
+              title: "Plaid Link failed",
+              description: error.display_message || error.error_message || error.error_code || "Plaid Link exited with an error.",
+              variant: "destructive",
+            });
+          }
+        },
+      });
+
+      handler.open();
+    } catch (error) {
+      toast({ title: "Unable to launch Plaid", description: apiErrorMessage(error), variant: "destructive" });
+    } finally {
+      setIsPlaidOpening(false);
+    }
+  };
+
+  const plaidBusy = isPlaidOpening || exchangePlaidToken.isPending;
 
   return (
     <Shell title="Banking & Lending" subtitle="Plaid integration, loan applications, lender directory">
@@ -153,7 +292,13 @@ export default function Banking() {
           </div>
 
           <div className="flex gap-3">
-            <Dialog open={showAddAccount} onOpenChange={setShowAddAccount}>
+            <Dialog open={showAddAccount} onOpenChange={(open) => {
+              setShowAddAccount(open);
+              if (!open) {
+                setLinkMode("plaid");
+                setIsPlaidOpening(false);
+              }
+            }}>
               <DialogTrigger asChild>
                 <Button data-testid="button-add-bank-account"><Plus className="w-4 h-4 mr-2" /> Add Bank Account</Button>
               </DialogTrigger>
@@ -170,60 +315,117 @@ export default function Banking() {
                       <SelectContent>{clients.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Institution Name</Label>
-                      <Input placeholder="e.g. Chase, Bank of America" value={accountForm.institutionName} onChange={e => setAccountForm(f => ({ ...f, institutionName: e.target.value }))} data-testid="input-institution-name" />
-                    </div>
-                    <div>
-                      <Label>Account Name</Label>
-                      <Input placeholder="e.g. Checking, Savings" value={accountForm.accountName} onChange={e => setAccountForm(f => ({ ...f, accountName: e.target.value }))} data-testid="input-account-name" />
-                    </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={linkMode === "plaid" ? "default" : "outline"}
+                      onClick={() => setLinkMode("plaid")}
+                      data-testid="button-mode-plaid"
+                    >
+                      <Link className="w-4 h-4 mr-2" /> Connect with Plaid
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={linkMode === "manual" ? "default" : "outline"}
+                      onClick={() => setLinkMode("manual")}
+                      data-testid="button-mode-manual"
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> Add manually
+                    </Button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>Account Type</Label>
-                      <Select value={accountForm.accountType} onValueChange={v => setAccountForm(f => ({ ...f, accountType: v }))}>
-                        <SelectTrigger data-testid="select-account-type"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="checking">Checking</SelectItem>
-                          <SelectItem value="savings">Savings</SelectItem>
-                          <SelectItem value="credit">Credit Card</SelectItem>
-                          <SelectItem value="loan">Loan</SelectItem>
-                          <SelectItem value="investment">Investment</SelectItem>
-                          <SelectItem value="mortgage">Mortgage</SelectItem>
-                        </SelectContent>
-                      </Select>
+
+                  {linkMode === "plaid" ? (
+                    <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">Connect automatically with Plaid</p>
+                          <p className="text-xs text-muted-foreground">Plaid will open securely and return accounts for the selected client.</p>
+                        </div>
+                        <Badge variant={plaidStatus?.configured ? "outline" : "secondary"}>{plaidStatus?.configured ? "Ready" : "Not configured"}</Badge>
+                      </div>
+                      <Button
+                        type="button"
+                        className="w-full"
+                        onClick={startPlaidLink}
+                        disabled={!accountForm.clientId || !plaidStatus?.configured || plaidBusy}
+                        data-testid="button-connect-plaid"
+                      >
+                        <Link className="w-4 h-4 mr-2" />
+                        {plaidBusy ? "Connecting..." : "Connect with Plaid"}
+                      </Button>
+                      {!accountForm.clientId && <p className="text-xs text-muted-foreground">Select a client before launching Plaid Link.</p>}
+                      {!plaidStatus?.configured && <p className="text-xs text-muted-foreground">Plaid must be configured in Settings before automatic linking is available.</p>}
                     </div>
-                    <div>
-                      <Label>Last 4 Digits</Label>
-                      <Input placeholder="1234" maxLength={4} value={accountForm.mask} onChange={e => setAccountForm(f => ({ ...f, mask: e.target.value }))} data-testid="input-account-mask" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <Label>Current Balance ($)</Label>
-                      <Input type="number" step="0.01" placeholder="0.00" value={accountForm.balanceCurrent} onChange={e => setAccountForm(f => ({ ...f, balanceCurrent: e.target.value }))} data-testid="input-balance-current" />
-                    </div>
-                    <div>
-                      <Label>Available ($)</Label>
-                      <Input type="number" step="0.01" placeholder="0.00" value={accountForm.balanceAvailable} onChange={e => setAccountForm(f => ({ ...f, balanceAvailable: e.target.value }))} data-testid="input-balance-available" />
-                    </div>
-                    <div>
-                      <Label>Limit ($)</Label>
-                      <Input type="number" step="0.01" placeholder="0.00" value={accountForm.balanceLimit} onChange={e => setAccountForm(f => ({ ...f, balanceLimit: e.target.value }))} data-testid="input-balance-limit" />
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label>Institution Name</Label>
+                          <Input placeholder="e.g. Chase, Bank of America" value={accountForm.institutionName} onChange={e => setAccountForm(f => ({ ...f, institutionName: e.target.value }))} data-testid="input-institution-name" />
+                        </div>
+                        <div>
+                          <Label>Account Name</Label>
+                          <Input placeholder="e.g. Checking, Savings" value={accountForm.accountName} onChange={e => setAccountForm(f => ({ ...f, accountName: e.target.value }))} data-testid="input-account-name" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label>Account Type</Label>
+                          <Select value={accountForm.accountType} onValueChange={v => setAccountForm(f => ({ ...f, accountType: v }))}>
+                            <SelectTrigger data-testid="select-account-type"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="checking">Checking</SelectItem>
+                              <SelectItem value="savings">Savings</SelectItem>
+                              <SelectItem value="credit">Credit Card</SelectItem>
+                              <SelectItem value="loan">Loan</SelectItem>
+                              <SelectItem value="investment">Investment</SelectItem>
+                              <SelectItem value="mortgage">Mortgage</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label>Last 4 Digits</Label>
+                          <Input placeholder="1234" maxLength={4} value={accountForm.mask} onChange={e => setAccountForm(f => ({ ...f, mask: e.target.value }))} data-testid="input-account-mask" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label>Current Balance ($)</Label>
+                          <Input type="number" step="0.01" placeholder="0.00" value={accountForm.balanceCurrent} onChange={e => setAccountForm(f => ({ ...f, balanceCurrent: e.target.value }))} data-testid="input-balance-current" />
+                        </div>
+                        <div>
+                          <Label>Available ($)</Label>
+                          <Input type="number" step="0.01" placeholder="0.00" value={accountForm.balanceAvailable} onChange={e => setAccountForm(f => ({ ...f, balanceAvailable: e.target.value }))} data-testid="input-balance-available" />
+                        </div>
+                        <div>
+                          <Label>Limit ($)</Label>
+                          <Input type="number" step="0.01" placeholder="0.00" value={accountForm.balanceLimit} onChange={e => setAccountForm(f => ({ ...f, balanceLimit: e.target.value }))} data-testid="input-balance-limit" />
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setShowAddAccount(false)}>Cancel</Button>
-                  <Button
-                    onClick={() => createAccount.mutate(accountForm)}
-                    disabled={!accountForm.clientId || !accountForm.institutionName || !accountForm.accountName || createAccount.isPending}
-                    data-testid="button-save-account"
-                  >
-                    {createAccount.isPending ? "Saving..." : "Link Account"}
-                  </Button>
+                  {linkMode === "manual" && (
+                    <Button
+                      onClick={() => createAccount.mutate(accountForm)}
+                      disabled={!accountForm.clientId || !accountForm.institutionName || !accountForm.accountName || createAccount.isPending}
+                      data-testid="button-save-account"
+                    >
+                      {createAccount.isPending ? "Saving..." : "Link Account"}
+                    </Button>
+                  )}
+                  {linkMode === "plaid" && (
+                    <Button
+                      onClick={startPlaidLink}
+                      disabled={!accountForm.clientId || !plaidStatus?.configured || plaidBusy}
+                      data-testid="button-save-plaid-account"
+                    >
+                      {plaidBusy ? "Connecting..." : "Connect with Plaid"}
+                    </Button>
+                  )}
                 </DialogFooter>
               </DialogContent>
             </Dialog>

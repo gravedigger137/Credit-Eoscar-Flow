@@ -253,6 +253,18 @@ function sanitizeBankAccount(account: any) {
   return safe;
 }
 
+function normalizePlaidBankAccountType(type: string | null | undefined, subtype: string | null | undefined) {
+  const normalizedSubtype = (subtype || "").toLowerCase();
+  const normalizedType = (type || "").toLowerCase();
+
+  if (normalizedSubtype === "checking") return "checking";
+  if (normalizedSubtype === "savings") return "savings";
+  if (normalizedType === "credit") return "credit";
+  if (normalizedType === "loan") return "loan";
+  if (normalizedType === "investment" || normalizedType === "brokerage") return "investment";
+  return normalizedSubtype || normalizedType || "checking";
+}
+
 function getActor(req: Request) {
   return { userId: req.session?.userId || null };
 }
@@ -2812,15 +2824,24 @@ Generate the COMPLETE document ready to print and mail. Include:
 
   app.post("/plaid/create-link-token", async (req, res) => {
     try {
-      const result = await createLinkToken(req.body.clientId || "system");
+      const { clientId } = req.body;
+      if (!clientId) return res.status(400).json({ message: "clientId is required before launching Plaid Link" });
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
+      const result = await createLinkToken(clientId);
+      if ("error" in result) return res.status(400).json({ message: result.error });
       res.json(result);
     } catch (e) { handleError(res, e); }
   });
 
   app.post("/plaid/exchange-token", async (req, res) => {
     try {
-      const { publicToken, clientId, institutionName } = req.body;
+      const { publicToken, clientId, institutionName, institutionId } = req.body;
       if (!publicToken || !clientId) return res.status(400).json({ message: "publicToken and clientId are required" });
+      const client = await storage.getClient(clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
+
       const result = await exchangePublicToken(publicToken);
       if ("error" in result) return res.status(400).json(result);
       const accounts = await getAccounts(result.accessToken);
@@ -2832,9 +2853,10 @@ Generate the COMPLETE document ready to print and mail. Include:
           clientId,
           plaidItemId: result.itemId,
           plaidAccessToken: encryptIfSensitive("plaid_access_token", result.accessToken),
-          institutionName: institutionName || "Unknown",
+          institutionName: institutionName || accounts.institution?.institution_name || "Plaid Institution",
+          institutionId: institutionId || accounts.institution?.institution_id || null,
           accountName: acct.name,
-          accountType: acct.type,
+          accountType: normalizePlaidBankAccountType(acct.type, acct.subtype),
           accountSubtype: acct.subtype || null,
           mask: acct.mask,
           balanceCurrent: acct.balanceCurrent,

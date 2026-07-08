@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { Analytics as VercelAnalytics } from "@vercel/analytics/react";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
@@ -85,6 +86,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <VercelAnalytics />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

@@ -23,6 +23,7 @@ import { redactSensitiveText, safeErrorMessage } from "./security-utils";
 import { getAIProviderStatus } from "./services/ai.service";
 import { getAllBureauConfigStatuses } from "./bureau-api-config";
 import { getPlaidConfigStatus } from "./provider-config";
+import { getEoscarMetro2IntegrationStatus } from "./eoscar-metro2-readiness";
 
 const app = express();
 const httpServer = createServer(app);
@@ -147,6 +148,8 @@ async function integrationStatus() {
   const stripeConfigured = !!process.env.STRIPE_SECRET_KEY;
   const stripeWebhookConfigured = !!process.env.STRIPE_WEBHOOK_SECRET;
   const plaidConfig = await getPlaidConfigStatus(storage);
+  const bureauCredentials = await getBureauStatus();
+  const eoscarMetro2 = getEoscarMetro2IntegrationStatus(bureauCredentials);
   const oauthConfigured = !!(
     (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) ||
     (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) ||
@@ -164,7 +167,11 @@ async function integrationStatus() {
       stripeWebhook: stripeWebhookConfigured ? "configured" : "not_configured",
       plaid: plaidConfig.configured ? "configured" : "not_configured",
       plaidConfig,
-      bureauCredentials: await getBureauStatus(),
+      bureauCredentials,
+      eoscarConfigured: eoscarMetro2.eoscarConfigured,
+      metro2Ready: eoscarMetro2.metro2Ready,
+      bureauIntegrationsConfigured: eoscarMetro2.bureauIntegrationsConfigured,
+      eoscarMetro2,
       oauth: oauthConfigured ? "configured" : "not_configured",
     },
   };

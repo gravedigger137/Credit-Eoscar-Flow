@@ -43,7 +43,10 @@ export function AppSidebar() {
       <SidebarHeader className="h-16 flex items-center px-4 border-b border-border/50">
         <div className="flex items-center gap-2 font-heading font-bold text-xl text-primary">
           <ShieldCheck className="w-6 h-6 text-primary" />
-          <span>Credit-Eoscar</span>
+          <div className="flex flex-col leading-tight">
+            <span>Infinite Arcadia</span>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Brandon&apos;s Fintech AI · Credit-Eoscar</span>
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent className="py-4">
@@ -113,7 +116,7 @@ export function Shell({ children, title, subtitle }: { children: React.ReactNode
                 <div className="hidden md:flex items-center text-sm text-muted-foreground">
                   <span className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-success"></span>
-                    System Status: Operational
+                    Infinite Arcadia Status: Operational
                   </span>
                 </div>
               )}

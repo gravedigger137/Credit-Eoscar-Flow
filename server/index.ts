@@ -24,6 +24,7 @@ import { getAIProviderStatus } from "./services/ai.service";
 import { getAllBureauConfigStatuses } from "./bureau-api-config";
 import { getPlaidConfigStatus } from "./provider-config";
 import { getEoscarMetro2IntegrationStatus } from "./eoscar-metro2-readiness";
+import { startInstitutionalExchangeWorker } from "./institutional-exchange/worker";
 
 const app = express();
 const httpServer = createServer(app);
@@ -400,6 +401,7 @@ app.use((req, res, next) => {
     "/config",
     "/credit-monitor/config",
     "/document-room",
+    "/institutional-exchange",
     "/status/agents",
     "/status/automation",
     "/status/infrastructure",
@@ -457,6 +459,7 @@ app.use((req, res, next) => {
   v1Router.use("/ai", aiRouter);
 
   await registerRoutes(httpServer, v1Router);
+  startInstitutionalExchangeWorker();
 
   app.use("/api/v1", v1Router);
   app.use("/api", v1Router);

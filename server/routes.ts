@@ -99,6 +99,7 @@ import {
   getAllBureauConfigStatuses,
   saveBureauApiConfig,
 } from "./bureau-api-config";
+import { institutionalExchangeRouter } from "./routes/institutional-exchange.routes";
 
 const execFileAsync = promisify(execFile);
 
@@ -279,6 +280,7 @@ function getConfirmable(req: Request) {
 export async function registerRoutes(httpServer: Server, app: Router): Promise<Server> {
 
   await ensureCreditSalesTable();
+  app.use("/institutional-exchange", institutionalExchangeRouter);
 
   // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) + AUTO-ONBOARDING ──────────────
   app.post("/book-consultation", rateLimit("api", (req) => [req.ip || "unknown", "book-consultation"]), async (req, res) => {

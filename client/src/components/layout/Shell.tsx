@@ -22,6 +22,7 @@ const navigation = [
   { name: "Calculators", href: "/calculators", icon: Calculator },
   { name: "Trust Accounting", href: "/trust-accounting", icon: Landmark },
   { name: "Document Room", href: "/document-room", icon: Archive },
+  { name: "Institutional Exchange", href: "/institutional-exchange", icon: Landmark },
   { name: "Automation", href: "/automation", icon: Zap },
   { name: "Tools", href: "/tools", icon: Wrench },
   { name: "Banking & Lending", href: "/banking", icon: Building2 },

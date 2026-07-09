@@ -31,6 +31,7 @@ import DocumentRoom from "@/pages/document-room";
 import Tools from "@/pages/tools";
 import Banking from "@/pages/banking";
 import Crypto from "@/pages/crypto";
+import InstitutionalExchange from "@/pages/institutional-exchange";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -69,6 +70,7 @@ function Router() {
       <Route path="/document-room">{() => <ProtectedRoute component={DocumentRoom} />}</Route>
       <Route path="/tools">{() => <ProtectedRoute component={Tools} />}</Route>
       <Route path="/banking">{() => <ProtectedRoute component={Banking} />}</Route>
+      <Route path="/institutional-exchange">{() => <ProtectedRoute component={InstitutionalExchange} />}</Route>
       <Route path="/crypto">{() => <ProtectedRoute component={Crypto} />}</Route>
       <Route path="/billing">{() => <ProtectedRoute component={Billing} />}</Route>
       <Route path="/notifications">{() => <ProtectedRoute component={Notifications} />}</Route>

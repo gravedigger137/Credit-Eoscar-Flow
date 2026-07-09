@@ -515,3 +515,298 @@ export const apiConfigs = pgTable("api_configs", {
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// ─── INSTITUTIONAL EXCHANGE NETWORK ───────────────────────────────────────
+export const financialNetworks = pgTable("financial_networks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("inactive"),
+  environment: text("environment").notNull().default("sandbox"),
+  requiresEnrollment: boolean("requires_enrollment").notNull().default(true),
+  supportsDocuments: boolean("supports_documents").notNull().default(false),
+  supportsSettlement: boolean("supports_settlement").notNull().default(false),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const institutionRegistry = pgTable("institution_registry", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  legalName: text("legal_name"),
+  institutionType: text("institution_type").notNull().default("financial_institution"),
+  status: text("status").notNull().default("active"),
+  jurisdiction: text("jurisdiction"),
+  website: text("website"),
+  contactEmail: text("contact_email"),
+  riskRating: text("risk_rating").notNull().default("standard"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const institutionCredentials = pgTable("institution_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  institutionId: varchar("institution_id").notNull().references(() => institutionRegistry.id, { onDelete: "cascade" }),
+  networkId: varchar("network_id").references(() => financialNetworks.id, { onDelete: "set null" }),
+  credentialType: text("credential_type").notNull(),
+  keyName: text("key_name").notNull(),
+  encryptedValue: text("encrypted_value").notNull(),
+  environment: text("environment").notNull().default("sandbox"),
+  status: text("status").notNull().default("active"),
+  lastRotatedAt: timestamp("last_rotated_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const paymentRails = pgTable("payment_rails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  settlementTiming: text("settlement_timing").notNull().default("configured_by_network"),
+  status: text("status").notNull().default("inactive"),
+  requiresEnrollment: boolean("requires_enrollment").notNull().default(true),
+  supportsRefunds: boolean("supports_refunds").notNull().default(false),
+  supportsCancellation: boolean("supports_cancellation").notNull().default(false),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const instrumentTypes = pgTable("instrument_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  requiresCollateral: boolean("requires_collateral").notNull().default(false),
+  requiresDocuments: boolean("requires_documents").notNull().default(true),
+  complianceProfile: text("compliance_profile").notNull().default("standard_review"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const institutionCapabilities = pgTable("institution_capabilities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  institutionId: varchar("institution_id").notNull().references(() => institutionRegistry.id, { onDelete: "cascade" }),
+  networkId: varchar("network_id").references(() => financialNetworks.id, { onDelete: "set null" }),
+  paymentRailId: varchar("payment_rail_id").references(() => paymentRails.id, { onDelete: "set null" }),
+  instrumentTypeId: varchar("instrument_type_id").references(() => instrumentTypes.id, { onDelete: "set null" }),
+  capabilityType: text("capability_type").notNull(),
+  capabilityCode: text("capability_code").notNull(),
+  status: text("status").notNull().default("inactive"),
+  requiresApproval: boolean("requires_approval").notNull().default(true),
+  config: jsonb("config").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const instruments = pgTable("instruments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentTypeId: varchar("instrument_type_id").notNull().references(() => instrumentTypes.id, { onDelete: "restrict" }),
+  ownerClientId: varchar("owner_client_id").references(() => clients.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  referenceNumber: text("reference_number"),
+  amount: integer("amount"),
+  currency: text("currency").notNull().default("USD"),
+  status: text("status").notNull().default("draft"),
+  jurisdiction: text("jurisdiction"),
+  maturityDate: timestamp("maturity_date"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const instrumentDocuments = pgTable("instrument_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentId: varchar("instrument_id").notNull().references(() => instruments.id, { onDelete: "cascade" }),
+  documentRoomItemId: varchar("document_room_item_id").references(() => documentRoomItems.id, { onDelete: "set null" }),
+  clientDocumentId: varchar("client_document_id").references(() => clientDocuments.id, { onDelete: "set null" }),
+  documentType: text("document_type").notNull(),
+  storageUri: text("storage_uri"),
+  sha256: text("sha256"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const instrumentCollateral = pgTable("instrument_collateral", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentId: varchar("instrument_id").notNull().references(() => instruments.id, { onDelete: "cascade" }),
+  collateralAssetId: varchar("collateral_asset_id").references(() => collateralAssets.id, { onDelete: "set null" }),
+  description: text("description").notNull(),
+  estimatedValue: integer("estimated_value"),
+  lienPosition: text("lien_position"),
+  status: text("status").notNull().default("active"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const instrumentParties = pgTable("instrument_parties", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentId: varchar("instrument_id").notNull().references(() => instruments.id, { onDelete: "cascade" }),
+  partyType: text("party_type").notNull(),
+  partyName: text("party_name").notNull(),
+  partyEmail: text("party_email"),
+  clientId: varchar("client_id").references(() => clients.id, { onDelete: "set null" }),
+  institutionId: varchar("institution_id").references(() => institutionRegistry.id, { onDelete: "set null" }),
+  role: text("role").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const instrumentAssignments = pgTable("instrument_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instrumentId: varchar("instrument_id").notNull().references(() => instruments.id, { onDelete: "cascade" }),
+  assignorPartyId: varchar("assignor_party_id").references(() => instrumentParties.id, { onDelete: "set null" }),
+  assigneePartyId: varchar("assignee_party_id").references(() => instrumentParties.id, { onDelete: "set null" }),
+  assignmentType: text("assignment_type").notNull(),
+  status: text("status").notNull().default("draft"),
+  effectiveAt: timestamp("effective_at"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const exchangeRequests = pgTable("exchange_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestType: text("request_type").notNull(),
+  instrumentId: varchar("instrument_id").references(() => instruments.id, { onDelete: "set null" }),
+  institutionId: varchar("institution_id").references(() => institutionRegistry.id, { onDelete: "set null" }),
+  networkId: varchar("network_id").references(() => financialNetworks.id, { onDelete: "set null" }),
+  paymentRailId: varchar("payment_rail_id").references(() => paymentRails.id, { onDelete: "set null" }),
+  amount: integer("amount"),
+  currency: text("currency").notNull().default("USD"),
+  status: text("status").notNull().default("approved"),
+  priority: integer("priority").notNull().default(100),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  requestedByUserId: varchar("requested_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  approvalReference: text("approval_reference"),
+  complianceStatus: text("compliance_status").notNull().default("pending"),
+  validationErrors: jsonb("validation_errors").$type<string[]>().default(sql`'[]'::jsonb`),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const exchangeRoutes = pgTable("exchange_routes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchangeRequestId: varchar("exchange_request_id").notNull().references(() => exchangeRequests.id, { onDelete: "cascade" }),
+  sequence: integer("sequence").notNull().default(1),
+  connectorCode: text("connector_code").notNull(),
+  networkId: varchar("network_id").references(() => financialNetworks.id, { onDelete: "set null" }),
+  institutionId: varchar("institution_id").references(() => institutionRegistry.id, { onDelete: "set null" }),
+  paymentRailId: varchar("payment_rail_id").references(() => paymentRails.id, { onDelete: "set null" }),
+  decisionStatus: text("decision_status").notNull().default("selected"),
+  decisionReason: text("decision_reason").notNull(),
+  score: integer("score").notNull().default(0),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const exchangeAttempts = pgTable("exchange_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchangeRequestId: varchar("exchange_request_id").notNull().references(() => exchangeRequests.id, { onDelete: "cascade" }),
+  exchangeRouteId: varchar("exchange_route_id").references(() => exchangeRoutes.id, { onDelete: "set null" }),
+  attemptNumber: integer("attempt_number").notNull().default(1),
+  status: text("status").notNull().default("queued"),
+  connectorCode: text("connector_code").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestPayloadHash: text("request_payload_hash"),
+  responseSummary: jsonb("response_summary").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  nextRetryAt: timestamp("next_retry_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const exchangeResults = pgTable("exchange_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchangeRequestId: varchar("exchange_request_id").notNull().references(() => exchangeRequests.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  externalReferenceId: text("external_reference_id"),
+  resultCode: text("result_code"),
+  resultSummary: text("result_summary"),
+  settledAmount: integer("settled_amount"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const settlementEvents = pgTable("settlement_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  exchangeRequestId: varchar("exchange_request_id").references(() => exchangeRequests.id, { onDelete: "set null" }),
+  eventType: text("event_type").notNull(),
+  status: text("status").notNull(),
+  amount: integer("amount"),
+  currency: text("currency").notNull().default("USD"),
+  occurredAt: timestamp("occurred_at").notNull().defaultNow(),
+  externalReferenceId: text("external_reference_id"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const routingRules = pgTable("routing_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  priority: integer("priority").notNull().default(100),
+  enabled: boolean("enabled").notNull().default(true),
+  conditions: jsonb("conditions").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  actions: jsonb("actions").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+  createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const connectorHealth = pgTable("connector_health", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  connectorCode: text("connector_code").notNull().unique(),
+  networkId: varchar("network_id").references(() => financialNetworks.id, { onDelete: "set null" }),
+  institutionId: varchar("institution_id").references(() => institutionRegistry.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("not_configured"),
+  configured: boolean("configured").notNull().default(false),
+  lastCheckedAt: timestamp("last_checked_at"),
+  latencyMs: integer("latency_ms"),
+  message: text("message"),
+  capabilities: jsonb("capabilities").$type<string[]>().default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertFinancialNetworkSchema = createInsertSchema(financialNetworks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertFinancialNetwork = z.infer<typeof insertFinancialNetworkSchema>;
+export type FinancialNetwork = typeof financialNetworks.$inferSelect;
+
+export const insertInstitutionRegistrySchema = createInsertSchema(institutionRegistry).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInstitutionRegistry = z.infer<typeof insertInstitutionRegistrySchema>;
+export type InstitutionRegistry = typeof institutionRegistry.$inferSelect;
+
+export const insertInstitutionCredentialSchema = createInsertSchema(institutionCredentials).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInstitutionCredential = z.infer<typeof insertInstitutionCredentialSchema>;
+export type InstitutionCredential = typeof institutionCredentials.$inferSelect;
+
+export const insertInstitutionCapabilitySchema = createInsertSchema(institutionCapabilities).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInstitutionCapability = z.infer<typeof insertInstitutionCapabilitySchema>;
+export type InstitutionCapability = typeof institutionCapabilities.$inferSelect;
+
+export const insertPaymentRailSchema = createInsertSchema(paymentRails).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPaymentRail = z.infer<typeof insertPaymentRailSchema>;
+export type PaymentRail = typeof paymentRails.$inferSelect;
+
+export const insertInstrumentTypeSchema = createInsertSchema(instrumentTypes).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInstrumentType = z.infer<typeof insertInstrumentTypeSchema>;
+export type InstrumentType = typeof instrumentTypes.$inferSelect;
+
+export const insertInstrumentSchema = createInsertSchema(instruments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInstrument = z.infer<typeof insertInstrumentSchema>;
+export type Instrument = typeof instruments.$inferSelect;
+
+export const insertExchangeRequestSchema = createInsertSchema(exchangeRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertExchangeRequest = z.infer<typeof insertExchangeRequestSchema>;
+export type ExchangeRequest = typeof exchangeRequests.$inferSelect;
+
+export const insertRoutingRuleSchema = createInsertSchema(routingRules).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRoutingRule = z.infer<typeof insertRoutingRuleSchema>;
+export type RoutingRule = typeof routingRules.$inferSelect;

@@ -100,6 +100,7 @@ import {
   saveBureauApiConfig,
 } from "./bureau-api-config";
 import { institutionalExchangeRouter } from "./routes/institutional-exchange.routes";
+import { dwollaRouter } from "./institutional-exchange/connectors/dwolla/dwolla.routes";
 
 const execFileAsync = promisify(execFile);
 
@@ -281,6 +282,7 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
 
   await ensureCreditSalesTable();
   app.use("/institutional-exchange", institutionalExchangeRouter);
+  app.use("/dwolla", dwollaRouter);
 
   // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) + AUTO-ONBOARDING ──────────────
   app.post("/book-consultation", rateLimit("api", (req) => [req.ip || "unknown", "book-consultation"]), async (req, res) => {
@@ -2854,6 +2856,7 @@ Generate the COMPLETE document ready to print and mail. Include:
         const [ba] = await db.insert(bankAccounts).values({
           clientId,
           plaidItemId: result.itemId,
+          plaidAccountId: acct.accountId,
           plaidAccessToken: encryptIfSensitive("plaid_access_token", result.accessToken),
           institutionName: institutionName || accounts.institution?.institution_name || "Plaid Institution",
           institutionId: institutionId || accounts.institution?.institution_id || null,

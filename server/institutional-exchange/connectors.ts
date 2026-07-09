@@ -253,13 +253,25 @@ export function buildConnectorConfig(
 ): ConnectorConfig {
   const normalized = code.toLowerCase();
   const prefix = `INSTITUTIONAL_EXCHANGE_${normalized.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
-  const enabled = env[`${prefix}_ENABLED`] === "true";
-  const endpoint = env[`${prefix}_ENDPOINT`];
+  const dwollaEnvironment = env.DWOLLA_ENV === "production" ? "production" : "sandbox";
+  const dwollaDefaultEndpoint = dwollaEnvironment === "production" ? "https://api.dwolla.com" : "https://api-sandbox.dwolla.com";
+  const dwollaCredentialsPresent = !!env.DWOLLA_KEY && !!env.DWOLLA_SECRET;
+  const enabled = normalized === "dwolla"
+    ? env[`${prefix}_ENABLED`] === "true" || dwollaCredentialsPresent
+    : env[`${prefix}_ENABLED`] === "true";
+  const endpoint = normalized === "dwolla"
+    ? env[`${prefix}_ENDPOINT`] || env.DWOLLA_API_URL || dwollaDefaultEndpoint
+    : env[`${prefix}_ENDPOINT`];
   const allowedEndpoints = (env.INSTITUTIONAL_EXCHANGE_ALLOWED_ENDPOINTS || "")
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
-  const credentialsPresent = !!env[`${prefix}_CREDENTIAL_REF`] || (normalized === "stripe" && !!env.STRIPE_SECRET_KEY);
+  if (normalized === "dwolla") {
+    allowedEndpoints.push("https://api.dwolla.com", "https://api-sandbox.dwolla.com");
+  }
+  const credentialsPresent = normalized === "dwolla"
+    ? dwollaCredentialsPresent || !!env[`${prefix}_CREDENTIAL_REF`]
+    : !!env[`${prefix}_CREDENTIAL_REF`] || (normalized === "stripe" && !!env.STRIPE_SECRET_KEY);
 
   return {
     code: normalized,

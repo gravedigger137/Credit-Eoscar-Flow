@@ -89,6 +89,8 @@ The migration `db/migrations/0004_institutional_exchange.sql` creates:
 
 The existing `audit_events` table is reused for institutional exchange audit history.
 
+The migration `db/migrations/0005_dwolla_bank_account_links.sql` adds Dwolla and Plaid linkage fields to `bank_accounts` so Plaid-linked accounts can be converted into Dwolla exchanges/funding sources without storing manual routing and account numbers.
+
 ## API Routes
 
 Admin-gated routes are available under both `/api/institutional-exchange` and `/api/v1/institutional-exchange`:
@@ -117,6 +119,41 @@ Admin-gated routes are available under both `/api/institutional-exchange` and `/
 - `POST /retry-queue/process`
 - `GET /audit-timeline`
 
+Dwolla connector routes are admin-gated and available under both `/api/dwolla` and `/api/v1/dwolla`:
+
+- `POST /customer`
+- `GET /customer/:id`
+- `POST /exchange`
+- `POST /funding-source`
+- `GET /funding-sources/:customerId`
+- `POST /transfer`
+- `GET /transfer/:id`
+- `GET /health`
+
+## Dwolla Connector
+
+The Dwolla connector uses `dwolla-v2` and the existing sensitive configuration storage/encryption helpers. `DWOLLA_KEY` and `DWOLLA_SECRET` are treated as sensitive values and must never be returned unmasked by health or configuration routes.
+
+Supported operations:
+
+- create and retrieve customers
+- create exchanges from a Plaid processor token
+- create funding sources from a Dwolla exchange
+- create funding sources manually when Plaid linkage is unavailable
+- list funding sources for a customer
+- create and retrieve transfers
+- report health/configuration status
+- verify webhook signatures when `DWOLLA_WEBHOOK_SECRET` is configured
+
+Plaid integration behavior:
+
+- If a selected bank account has a stored Plaid access token and Plaid account ID, the connector requests a Plaid processor token for Dwolla.
+- The processor token is submitted to Dwolla as an Exchange.
+- The Exchange URL is then used to create the Dwolla funding source.
+- Manual routing/account-number funding source creation remains available as a fallback when no Plaid-linked account is selected.
+
+The connector returns explicit non-success statuses for missing credentials, missing enrollment configuration, or non-allowlisted endpoints. It does not claim ACH or Dwolla production access unless the required credentials and partner configuration are present.
+
 ## Environment Variables
 
 Required for production credential encryption:
@@ -137,6 +174,15 @@ Optional institutional exchange settings:
 - `INSTITUTIONAL_EXCHANGE_ACH_ENABLED`
 - `INSTITUTIONAL_EXCHANGE_ACH_ENDPOINT`
 - `INSTITUTIONAL_EXCHANGE_ACH_CREDENTIAL_REF`
+
+Dwolla connector settings:
+
+- `DWOLLA_KEY`
+- `DWOLLA_SECRET`
+- `DWOLLA_ENV`
+- `DWOLLA_API_URL`
+- `DWOLLA_PLAID_EXCHANGE_PARTNER_HREF`
+- `DWOLLA_WEBHOOK_SECRET`
 
 Additional adapters follow the same naming pattern:
 

@@ -401,6 +401,7 @@ app.use((req, res, next) => {
     "/config",
     "/credit-monitor/config",
     "/document-room",
+    "/dwolla",
     "/institutional-exchange",
     "/status/agents",
     "/status/automation",

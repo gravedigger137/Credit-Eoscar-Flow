@@ -24,6 +24,7 @@ const SENSITIVE_KEY_PATTERNS = [
   "webhook",
   "stripe",
   "plaid",
+  "dwolla",
   "bureau",
   "eoscar",
   "smtp",

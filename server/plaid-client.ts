@@ -1,4 +1,4 @@
-import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from "plaid";
+import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode, ProcessorTokenCreateRequestProcessorEnum } from "plaid";
 import { storage } from "./storage";
 import { getPlaidRuntimeConfig } from "./provider-config";
 
@@ -66,6 +66,20 @@ export async function exchangePublicToken(publicToken: string) {
     accessToken: response.data.access_token,
     itemId: response.data.item_id,
   };
+}
+
+export async function createDwollaProcessorToken(accessToken: string, accountId: string) {
+  const client = await getPlaidClient();
+  if (!client) return { error: "Plaid not configured" };
+  if (!accessToken || !accountId) return { error: "accessToken and accountId are required" };
+
+  const response = await client.processorTokenCreate({
+    access_token: accessToken,
+    account_id: accountId,
+    processor: ProcessorTokenCreateRequestProcessorEnum.Dwolla,
+  });
+
+  return { processorToken: response.data.processor_token };
 }
 
 export async function getAccounts(accessToken: string) {

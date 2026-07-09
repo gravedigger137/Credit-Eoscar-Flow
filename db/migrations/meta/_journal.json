@@ -36,6 +36,13 @@
       "when": 1783600000000,
       "tag": "0004_institutional_exchange",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783600000001,
+      "tag": "0005_dwolla_bank_account_links",
+      "breakpoints": true
     }
   ]
 }

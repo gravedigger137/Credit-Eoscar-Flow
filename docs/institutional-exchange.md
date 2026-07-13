@@ -202,9 +202,14 @@ The route verifies `X-Request-Signature-SHA-256` using `DWOLLA_WEBHOOK_SECRET` b
 
 Supported internal customer topics:
 
+- `customer_activated`
 - `customer_created`
+- `customer_deactivated`
 - `customer_verified`
 - `customer_reverification_needed`
+- `customer_kba_verification_needed`
+- `customer_kba_verification_failed`
+- `customer_kba_verification_passed`
 - `customer_verification_document_needed`
 - `customer_verification_document_uploaded`
 - `customer_verification_document_approved`

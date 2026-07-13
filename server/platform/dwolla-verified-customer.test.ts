@@ -112,6 +112,9 @@ test("Dwolla Verified Customer payload sends only last4 SSN unless full SSN is e
 test("Dwolla verification status mapping supports customer webhook topics", () => {
   assert.equal(normalizeDwollaWebhookTopic("customer.verification.document-needed"), "customer_verification_document_needed");
   assert.equal(normalizeDwollaVerificationStatus("customer_verified"), "verified");
+  assert.equal(normalizeDwollaVerificationStatus("customer_kba_verification_needed"), "kba");
+  assert.equal(normalizeDwollaVerificationStatus("customer_kba_verification_failed"), "failed");
+  assert.equal(normalizeDwollaVerificationStatus("customer_kba_verification_passed"), "verified");
   assert.equal(normalizeDwollaVerificationStatus("customer_verification_document_needed"), "document");
   assert.equal(normalizeDwollaVerificationStatus("customer_suspended"), "suspended");
   assert.equal(normalizeDwollaVerificationStatus(undefined, "retry"), "retry");
@@ -154,6 +157,17 @@ test("Dwolla document validation accepts PDF signatures and rejects mismatched f
   assert.throws(() => validateDwollaDocumentFile({ originalname: "fake.pdf", mimetype: "application/pdf", size: fs.statSync(fake).size, path: fake }), /signature/);
 
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("Dwolla document submission requires non-local private storage configuration", async () => {
+  const { isDwollaProductionDocumentStorageConfigured } = await loadVerifiedCustomerHelpers();
+
+  assert.equal(isDwollaProductionDocumentStorageConfigured(undefined), false);
+  assert.equal(isDwollaProductionDocumentStorageConfigured("local"), false);
+  assert.equal(isDwollaProductionDocumentStorageConfigured("local_private"), false);
+  assert.equal(isDwollaProductionDocumentStorageConfigured("filesystem"), false);
+  assert.equal(isDwollaProductionDocumentStorageConfigured("s3"), true);
+  assert.equal(isDwollaProductionDocumentStorageConfigured("private-object-storage"), true);
 });
 
 test("Dwolla error mapper does not return raw provider bodies with sensitive fields", async () => {

@@ -170,6 +170,11 @@ export function validateDwollaDocumentFile(file: { originalname: string; mimetyp
   }
 }
 
+export function isDwollaProductionDocumentStorageConfigured(storageProvider = process.env.PRIVATE_UPLOAD_STORAGE) {
+  const provider = (storageProvider || "").trim().toLowerCase();
+  return !!provider && !["local", "local_private", "disk", "file", "filesystem"].includes(provider);
+}
+
 function requireProfile(profile: Record<string, unknown>, fields: string[]) {
   const missing = fields.filter((field) => !clean(String(profile[field] || "")));
   if (missing.length) {
@@ -473,7 +478,7 @@ export class DwollaVerifiedCustomerService {
     let dwollaDocumentUrl: string | null = null;
     let dwollaDocumentId: string | null = null;
     let failureReason: string | null = null;
-    const secureStorageConfigured = process.env.PRIVATE_UPLOAD_STORAGE && process.env.PRIVATE_UPLOAD_STORAGE !== "local";
+    const secureStorageConfigured = isDwollaProductionDocumentStorageConfigured();
 
     if (process.env.DWOLLA_DOCUMENT_UPLOADS_ENABLED === "true" && secureStorageConfigured) {
       try {

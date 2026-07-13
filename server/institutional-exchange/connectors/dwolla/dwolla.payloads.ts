@@ -117,9 +117,14 @@ export interface DwollaCustomerProfileSummary {
 }
 
 const topicStatusMap: Record<string, DwollaVerificationStatus> = {
+  customer_activated: "verified",
   customer_created: "pending",
+  customer_deactivated: "failed",
   customer_verified: "verified",
   customer_reverification_needed: "retry",
+  customer_kba_verification_needed: "kba",
+  customer_kba_verification_failed: "failed",
+  customer_kba_verification_passed: "verified",
   customer_verification_document_needed: "document",
   customer_verification_document_uploaded: "pending",
   customer_verification_document_approved: "verified",

@@ -52,6 +52,15 @@ BrandonFintech is not ready for real users until:
 - Live keys are rotated into platform secrets.
 - Refund, dispute, and failed payment handling are documented.
 
+## Before Live Dwolla Verified Customers
+
+- Dwolla production account approval and verified-customer permissions are complete.
+- `DWOLLA_KEY`, `DWOLLA_SECRET`, `DWOLLA_ENV`, and `DWOLLA_WEBHOOK_SECRET` are configured through Render secrets.
+- The Dwolla dashboard webhook points to `DWOLLA_WEBHOOK_URL`.
+- `SENSITIVE_CONFIG_ENCRYPTION_KEY` is configured before accepting any full SSN.
+- Private identity-document storage is configured; local private disk is not sufficient for production retention.
+- KYC/customer onboarding copy, retention rules, webhook monitoring, and document handling are reviewed by the appropriate compliance owner.
+
 ## Before Treasury or Connect
 
 - Do not implement Treasury, cards, ACH, Connect payouts, or KYC/KYB until compliance and Stripe eligibility are confirmed.

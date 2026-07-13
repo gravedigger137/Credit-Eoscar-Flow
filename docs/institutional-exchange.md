@@ -130,6 +130,20 @@ Dwolla connector routes are admin-gated and available under both `/api/dwolla` a
 - `GET /transfer/:id`
 - `GET /health`
 
+Dwolla verified-customer onboarding routes are available under both `/api/dwolla` and `/api/v1/dwolla`. Client actors are limited to matching client records by email, while administrators retain access through the existing RBAC middleware:
+
+- `POST /customers/verified`
+- `GET /customers/:customerId`
+- `PATCH /customers/:customerId`
+- `GET /customers/:customerId/verification`
+- `POST /customers/:customerId/retry`
+- `POST /customers/:customerId/documents`
+- `POST /webhooks`
+
+The admin-only timeline route is available under both `/api/admin/dwolla` and `/api/v1/admin/dwolla`:
+
+- `GET /customers/:customerId/timeline`
+
 ## Dwolla Connector
 
 The Dwolla connector uses `dwolla-v2` and the existing sensitive configuration storage/encryption helpers. `DWOLLA_KEY` and `DWOLLA_SECRET` are treated as sensitive values and must never be returned unmasked by health or configuration routes.
@@ -153,6 +167,75 @@ Plaid integration behavior:
 - Manual routing/account-number funding source creation remains available as a fallback when no Plaid-linked account is selected.
 
 The connector returns explicit non-success statuses for missing credentials, missing enrollment configuration, or non-allowlisted endpoints. It does not claim ACH or Dwolla production access unless the required credentials and partner configuration are present.
+
+### Verified Customer Onboarding
+
+Verified customer onboarding extends the existing Dwolla connector. The local profile uses existing client fields for name, email, phone, birth date, and address where available. Dwolla-specific status fields are stored on `clients`, and full SSN values are encrypted with the existing sensitive configuration encryption system before persistence.
+
+Security behavior:
+
+- full SSN is never returned by API responses
+- encrypted full SSN is never returned by API responses
+- full SSN input is cleared in the browser after submission
+- audit events store only status, client IDs, Dwolla customer IDs, and whether sensitive data was provided
+- webhook events are deduplicated by Dwolla event ID
+- older webhook timestamps cannot overwrite newer local verification state
+- document uploads are validated for file type, size, and signature
+
+Supported normalized verification states:
+
+- `pending`
+- `verified`
+- `retry`
+- `kba`
+- `document`
+- `suspended`
+- `failed`
+
+### Webhook Setup
+
+Configure the Dwolla webhook URL to point to:
+
+`/api/dwolla/webhooks`
+
+The route verifies `X-Request-Signature-SHA-256` using `DWOLLA_WEBHOOK_SECRET` before persisting or auditing the event. Duplicate deliveries return success without applying state changes again.
+
+Supported internal customer topics:
+
+- `customer_created`
+- `customer_verified`
+- `customer_reverification_needed`
+- `customer_verification_document_needed`
+- `customer_verification_document_uploaded`
+- `customer_verification_document_approved`
+- `customer_verification_document_failed`
+- `customer_suspended`
+
+### Document Upload Requirements
+
+Dwolla verification documents are accepted as PDF, JPG, JPEG, or PNG up to `DWOLLA_DOCUMENT_MAX_BYTES`. Files are written outside public web directories under `DWOLLA_PRIVATE_UPLOAD_DIR`.
+
+For production live document submission, configure private storage through `PRIVATE_UPLOAD_STORAGE` and set `DWOLLA_DOCUMENT_UPLOADS_ENABLED=true`. If private production storage is not configured, the API records the upload metadata and returns a clear storage-configuration blocker instead of claiming the document was submitted to Dwolla.
+
+### Sandbox Procedure
+
+1. Configure sandbox Dwolla credentials and `DWOLLA_ENV=sandbox`.
+2. Configure `DWOLLA_WEBHOOK_SECRET` and register `DWOLLA_WEBHOOK_URL` in the Dwolla dashboard.
+3. Submit a verified customer from the client profile dialog with required identity fields.
+4. Complete sandbox verification, retry, or document-required paths in Dwolla.
+5. Confirm `/api/dwolla/customers/:customerId/verification` shows the normalized status and timeline.
+6. Upload a test verification document only when private storage and document upload submission are configured.
+
+### Production Activation Blockers
+
+- Dwolla production account approval and verified-customer permissions
+- production `DWOLLA_KEY` and `DWOLLA_SECRET`
+- production `DWOLLA_WEBHOOK_SECRET`
+- production webhook registration for `DWOLLA_WEBHOOK_URL`
+- `SENSITIVE_CONFIG_ENCRYPTION_KEY`
+- private identity-document storage configuration
+- compliance review for verified customer onboarding copy, retention, and KYC workflows
+- operational review for document handling, audit retention, and webhook monitoring
 
 ## Environment Variables
 
@@ -183,6 +266,10 @@ Dwolla connector settings:
 - `DWOLLA_API_URL`
 - `DWOLLA_PLAID_EXCHANGE_PARTNER_HREF`
 - `DWOLLA_WEBHOOK_SECRET`
+- `DWOLLA_WEBHOOK_URL`
+- `DWOLLA_DOCUMENT_UPLOADS_ENABLED`
+- `DWOLLA_DOCUMENT_MAX_BYTES`
+- `DWOLLA_PRIVATE_UPLOAD_DIR`
 
 Additional adapters follow the same naming pattern:
 

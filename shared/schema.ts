@@ -54,9 +54,20 @@ export const clients = pgTable("clients", {
   dob: text("dob"),
   dateOfBirth: text("date_of_birth"),
   address: text("address"),
+  address2: text("address2"),
   city: text("city"),
   state: text("state"),
   zip: text("zip"),
+  last4Ssn: text("last4_ssn"),
+  encryptedFullSsn: text("encrypted_full_ssn"),
+  ipAddress: text("ip_address"),
+  correlationId: text("correlation_id"),
+  dwollaCustomerId: text("dwolla_customer_id"),
+  dwollaCustomerUrl: text("dwolla_customer_url"),
+  dwollaVerificationStatus: text("dwolla_verification_status").notNull().default("pending"),
+  dwollaVerificationRawStatus: text("dwolla_verification_raw_status"),
+  dwollaVerificationUpdatedAt: timestamp("dwolla_verification_updated_at"),
+  dwollaVerificationFailureReason: text("dwolla_verification_failure_reason"),
   previousAddress: text("previous_address"),
   idType: text("id_type"),
   idNumber: text("id_number"),
@@ -267,6 +278,52 @@ export const clientDocuments = pgTable("client_documents", {
 export const insertClientDocumentSchema = createInsertSchema(clientDocuments).omit({ id: true, uploadedAt: true });
 export type InsertClientDocument = z.infer<typeof insertClientDocumentSchema>;
 export type ClientDocument = typeof clientDocuments.$inferSelect;
+
+// ─── DWOLLA VERIFIED CUSTOMER DOCUMENTS ─────────────────────────────────
+export const dwollaCustomerDocuments = pgTable("dwolla_customer_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  dwollaCustomerId: text("dwolla_customer_id").notNull(),
+  dwollaDocumentId: text("dwolla_document_id"),
+  dwollaDocumentUrl: text("dwolla_document_url"),
+  documentType: text("document_type").notNull().default("identity_verification"),
+  status: text("status").notNull().default("received"),
+  fileName: text("file_name").notNull(),
+  originalName: text("original_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  fileSize: integer("file_size").notNull(),
+  sha256: text("sha256").notNull(),
+  storageProvider: text("storage_provider").notNull().default("local_private"),
+  storagePath: text("storage_path").notNull(),
+  uploadedByUserId: varchar("uploaded_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDwollaCustomerDocumentSchema = createInsertSchema(dwollaCustomerDocuments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDwollaCustomerDocument = z.infer<typeof insertDwollaCustomerDocumentSchema>;
+export type DwollaCustomerDocument = typeof dwollaCustomerDocuments.$inferSelect;
+
+// ─── DWOLLA CUSTOMER WEBHOOK EVENTS ─────────────────────────────────────
+export const dwollaCustomerEvents = pgTable("dwolla_customer_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: text("event_id").notNull().unique(),
+  topic: text("topic").notNull(),
+  internalTopic: text("internal_topic").notNull(),
+  resourceUrl: text("resource_url"),
+  clientId: varchar("client_id").references(() => clients.id, { onDelete: "set null" }),
+  dwollaCustomerId: text("dwolla_customer_id"),
+  rawStatus: text("raw_status"),
+  normalizedStatus: text("normalized_status"),
+  occurredAt: timestamp("occurred_at").notNull(),
+  processedAt: timestamp("processed_at").defaultNow(),
+  payloadSummary: jsonb("payload_summary").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`),
+});
+
+export const insertDwollaCustomerEventSchema = createInsertSchema(dwollaCustomerEvents).omit({ id: true, processedAt: true });
+export type InsertDwollaCustomerEvent = z.infer<typeof insertDwollaCustomerEventSchema>;
+export type DwollaCustomerEvent = typeof dwollaCustomerEvents.$inferSelect;
 
 // ─── ONBOARDING STEPS ─────────────────────────────────────────────────────
 export const onboardingSteps = pgTable("onboarding_steps", {

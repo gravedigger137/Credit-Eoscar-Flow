@@ -43,6 +43,13 @@
       "when": 1783600000001,
       "tag": "0005_dwolla_bank_account_links",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783600000002,
+      "tag": "0006_dwolla_verified_customer_onboarding",
+      "breakpoints": true
     }
   ]
 }

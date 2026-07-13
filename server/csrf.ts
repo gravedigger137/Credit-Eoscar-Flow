@@ -29,7 +29,14 @@ function timingSafeEqual(a: string, b: string) {
 }
 
 function isExempt(req: Request) {
-  return req.path === "/stripe/webhook" || req.path === "/api/stripe/webhook" || req.path === "/api/v1/stripe/webhook";
+  return [
+    "/stripe/webhook",
+    "/api/stripe/webhook",
+    "/api/v1/stripe/webhook",
+    "/dwolla/webhooks",
+    "/api/dwolla/webhooks",
+    "/api/v1/dwolla/webhooks",
+  ].includes(req.path);
 }
 
 export function issueCsrfToken(req: Request, res: Response) {

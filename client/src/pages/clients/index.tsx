@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, csrfFetch } from "@/lib/queryClient";
 import { useState } from "react";
-import { Search, Plus, Mail, Phone, AlertTriangle, UserCheck, FileText, ShieldAlert, ClipboardList, Eye, Pencil, Upload, Download, Trash2, File } from "lucide-react";
+import { Search, Plus, Mail, Phone, AlertTriangle, UserCheck, FileText, ShieldAlert, ClipboardList, Eye, Pencil, Upload, Download, Trash2, File, RefreshCw, ShieldCheck } from "lucide-react";
 import { useRef } from "react";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -28,6 +28,44 @@ const emptyPullForm = {
   negativeItems: "", negativeItemsList: "",
   runAnalysis: true,
 };
+
+const emptyDwollaForm = {
+  dateOfBirth: "",
+  address1: "",
+  address2: "",
+  city: "",
+  state: "",
+  postalCode: "",
+  last4SSN: "",
+  fullSSN: "",
+};
+
+function apiErrorMessage(error: unknown, fallback = "Request failed") {
+  const raw = error instanceof Error ? error.message : fallback;
+  const json = raw.replace(/^\d+:\s*/, "");
+  try {
+    const parsed = JSON.parse(json);
+    return parsed.message || parsed.error || raw;
+  } catch {
+    return raw;
+  }
+}
+
+function dwollaStatusClass(status: string | undefined) {
+  switch (status) {
+    case "verified":
+      return "border-emerald-500 text-emerald-600";
+    case "retry":
+    case "kba":
+    case "document":
+      return "border-amber-500 text-amber-600";
+    case "suspended":
+    case "failed":
+      return "border-destructive text-destructive";
+    default:
+      return "border-muted-foreground text-muted-foreground";
+  }
+}
 
 export default function Clients() {
   const { toast } = useToast();
@@ -47,6 +85,8 @@ export default function Clients() {
   const [uploadCategory, setUploadCategory] = useState("credit_report");
   const [uploadNotes, setUploadNotes] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dwollaDocumentInputRef = useRef<HTMLInputElement>(null);
+  const [dwollaForm, setDwollaForm] = useState(emptyDwollaForm);
 
   const { data: clients = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/clients"] });
   const { data: reports = [] } = useQuery<any[]>({ queryKey: ["/api/reports"] });
@@ -94,6 +134,17 @@ export default function Clients() {
     enabled: !!(uploadClient?.id || viewClient?.id),
   });
 
+  const dwollaVerificationQuery = useQuery<any>({
+    queryKey: ["/api/dwolla/customers", viewClient?.id, "verification"],
+    queryFn: async () => {
+      if (!viewClient?.id) return null;
+      const r = await fetch(`/api/dwolla/customers/${viewClient.id}/verification`, { credentials: "include" });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    enabled: !!(viewOpen && viewClient?.id),
+  });
+
   const uploadMutation = useMutation({
     mutationFn: async ({ clientId, file, category, notes }: { clientId: string; file: File; category: string; notes: string }) => {
       const fd = new FormData();
@@ -117,6 +168,77 @@ export default function Clients() {
   const deleteDocMutation = useMutation({
     mutationFn: async (id: string) => { const r = await apiRequest("DELETE", `/api/documents/${id}`); return r; },
     onSuccess: () => { docsQuery.refetch(); toast({ title: "Document deleted" }); },
+  });
+
+  const createDwollaCustomerMutation = useMutation({
+    mutationFn: async () => {
+      if (!viewClient?.id) throw new Error("Client is required");
+      const res = await apiRequest("POST", "/api/dwolla/customers/verified", {
+        clientId: viewClient.id,
+        dateOfBirth: dwollaForm.dateOfBirth,
+        address1: dwollaForm.address1,
+        address2: dwollaForm.address2 || undefined,
+        city: dwollaForm.city,
+        state: dwollaForm.state,
+        postalCode: dwollaForm.postalCode,
+        last4SSN: dwollaForm.last4SSN,
+        fullSSN: dwollaForm.fullSSN || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: async () => {
+      setDwollaForm((current) => ({ ...current, fullSSN: "" }));
+      await Promise.all([
+        dwollaVerificationQuery.refetch(),
+        qc.invalidateQueries({ queryKey: ["/api/clients"] }),
+      ]);
+      toast({ title: "Dwolla verification submitted", description: "Sensitive fields were not returned to the browser." });
+    },
+    onError: (error) => toast({ title: "Dwolla verification failed", description: apiErrorMessage(error), variant: "destructive" }),
+  });
+
+  const retryDwollaMutation = useMutation({
+    mutationFn: async () => {
+      if (!viewClient?.id) throw new Error("Client is required");
+      const res = await apiRequest("POST", `/api/dwolla/customers/${viewClient.id}/retry`, {
+        dateOfBirth: dwollaForm.dateOfBirth || undefined,
+        address1: dwollaForm.address1 || undefined,
+        address2: dwollaForm.address2 || undefined,
+        city: dwollaForm.city || undefined,
+        state: dwollaForm.state || undefined,
+        postalCode: dwollaForm.postalCode || undefined,
+        last4SSN: dwollaForm.last4SSN || undefined,
+        fullSSN: dwollaForm.fullSSN || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: async () => {
+      setDwollaForm((current) => ({ ...current, fullSSN: "" }));
+      await dwollaVerificationQuery.refetch();
+      toast({ title: "Dwolla verification retry submitted" });
+    },
+    onError: (error) => toast({ title: "Retry failed", description: apiErrorMessage(error), variant: "destructive" }),
+  });
+
+  const uploadDwollaDocumentMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!viewClient?.id) throw new Error("Client is required");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("documentType", "identity_verification");
+      const r = await csrfFetch(`/api/dwolla/customers/${viewClient.id}/documents`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    onSuccess: async (result: any) => {
+      if (dwollaDocumentInputRef.current) dwollaDocumentInputRef.current.value = "";
+      await dwollaVerificationQuery.refetch();
+      toast({
+        title: "Dwolla document received",
+        description: result?.productionStorageConfigured ? "Document was submitted through the configured private storage path." : "Private production storage must be configured before live Dwolla document submission.",
+      });
+    },
+    onError: (error) => toast({ title: "Document upload failed", description: apiErrorMessage(error), variant: "destructive" }),
   });
 
   const pullMutation = useMutation({
@@ -154,6 +276,16 @@ export default function Clients() {
 
   const handleViewClient = (client: any) => {
     setViewClient(client);
+    setDwollaForm({
+      dateOfBirth: client.dateOfBirth || client.dob || "",
+      address1: client.address || "",
+      address2: client.address2 || "",
+      city: client.city || "",
+      state: client.state || "",
+      postalCode: client.zip || "",
+      last4SSN: client.last4SSN?.replace(/\D/g, "").slice(-4) || (client.ssn ? client.ssn.replace(/\D/g, "").slice(-4) : ""),
+      fullSSN: "",
+    });
     setViewOpen(true);
   };
 
@@ -516,8 +648,15 @@ export default function Clients() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={viewOpen} onOpenChange={(open) => {
+        setViewOpen(open);
+        if (!open) {
+          setViewClient(null);
+          setDwollaForm(emptyDwollaForm);
+          if (dwollaDocumentInputRef.current) dwollaDocumentInputRef.current.value = "";
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{viewClient?.firstName} {viewClient?.lastName}</DialogTitle>
             <DialogDescription>Client profile details</DialogDescription>
@@ -555,6 +694,131 @@ export default function Clients() {
                   viewClient.status === 'onboarding' ? 'border-amber-500 text-amber-600' :
                   'border-muted-foreground text-muted-foreground'
                 }>{viewClient.status}</Badge></p>
+              </div>
+              <div className="border-t pt-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Dwolla Verification</p>
+                    <p className="text-xs text-muted-foreground">Verified customer onboarding for Dwolla transfers.</p>
+                  </div>
+                  <Badge variant="outline" className={dwollaStatusClass(dwollaVerificationQuery.data?.customer?.dwollaVerificationStatus)}>
+                    {dwollaVerificationQuery.data?.customer?.dwollaVerificationStatus || "not started"}
+                  </Badge>
+                </div>
+
+                {dwollaVerificationQuery.isError ? (
+                  <p className="text-sm text-destructive">Unable to load Dwolla verification status.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-muted-foreground">Dwolla ID:</span> <span className="font-medium">{dwollaVerificationQuery.data?.customer?.dwollaCustomerId || "—"}</span></div>
+                    <div><span className="text-muted-foreground">Updated:</span> <span className="font-medium">{dwollaVerificationQuery.data?.customer?.dwollaVerificationUpdatedAt ? new Date(dwollaVerificationQuery.data.customer.dwollaVerificationUpdatedAt).toLocaleString() : "—"}</span></div>
+                    <div><span className="text-muted-foreground">SSN:</span> <span className="font-medium">{dwollaVerificationQuery.data?.customer?.last4SSN || "—"}</span></div>
+                    <div><span className="text-muted-foreground">Action:</span> <span className="font-medium">{dwollaVerificationQuery.data?.customer?.dwollaVerificationFailureReason || (dwollaVerificationQuery.data?.documentRequired ? "Document required" : "—")}</span></div>
+                  </div>
+                )}
+
+                {!dwollaVerificationQuery.data?.customer?.dwollaCustomerId && (
+                  <div className="rounded-md border p-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label>Date of Birth *</Label>
+                        <Input type="date" value={dwollaForm.dateOfBirth} onChange={e => setDwollaForm(f => ({ ...f, dateOfBirth: e.target.value }))} data-testid="input-dwolla-dob" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Last 4 SSN *</Label>
+                        <Input maxLength={4} value={dwollaForm.last4SSN} onChange={e => setDwollaForm(f => ({ ...f, last4SSN: e.target.value.replace(/\D/g, "").slice(0, 4) }))} data-testid="input-dwolla-last4" />
+                      </div>
+                      <div className="space-y-1 col-span-2">
+                        <Label>Full SSN (optional, encrypted)</Label>
+                        <Input type="password" autoComplete="off" value={dwollaForm.fullSSN} onChange={e => setDwollaForm(f => ({ ...f, fullSSN: e.target.value }))} data-testid="input-dwolla-full-ssn" />
+                      </div>
+                      <div className="space-y-1 col-span-2">
+                        <Label>Address 1 *</Label>
+                        <Input value={dwollaForm.address1} onChange={e => setDwollaForm(f => ({ ...f, address1: e.target.value }))} data-testid="input-dwolla-address1" />
+                      </div>
+                      <div className="space-y-1 col-span-2">
+                        <Label>Address 2</Label>
+                        <Input value={dwollaForm.address2} onChange={e => setDwollaForm(f => ({ ...f, address2: e.target.value }))} data-testid="input-dwolla-address2" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>City *</Label>
+                        <Input value={dwollaForm.city} onChange={e => setDwollaForm(f => ({ ...f, city: e.target.value }))} data-testid="input-dwolla-city" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>State *</Label>
+                        <Input maxLength={2} value={dwollaForm.state} onChange={e => setDwollaForm(f => ({ ...f, state: e.target.value.toUpperCase() }))} data-testid="input-dwolla-state" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Postal Code *</Label>
+                        <Input value={dwollaForm.postalCode} onChange={e => setDwollaForm(f => ({ ...f, postalCode: e.target.value }))} data-testid="input-dwolla-postal" />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => createDwollaCustomerMutation.mutate()}
+                      disabled={createDwollaCustomerMutation.isPending || !dwollaForm.dateOfBirth || !dwollaForm.address1 || !dwollaForm.city || !dwollaForm.state || !dwollaForm.postalCode || dwollaForm.last4SSN.length !== 4}
+                      data-testid="button-create-dwolla-customer"
+                    >
+                      {createDwollaCustomerMutation.isPending ? "Submitting..." : "Submit Dwolla Verification"}
+                    </Button>
+                  </div>
+                )}
+
+                {dwollaVerificationQuery.data?.customer?.dwollaCustomerId && (
+                  <div className="rounded-md border p-3 space-y-3">
+                    {dwollaVerificationQuery.data?.canRetry && (
+                      <div className="space-y-2">
+                        <Label>Retry SSN Information</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input placeholder="Last 4 SSN" maxLength={4} value={dwollaForm.last4SSN} onChange={e => setDwollaForm(f => ({ ...f, last4SSN: e.target.value.replace(/\D/g, "").slice(0, 4) }))} />
+                          <Input type="password" autoComplete="off" placeholder="Full SSN if required" value={dwollaForm.fullSSN} onChange={e => setDwollaForm(f => ({ ...f, fullSSN: e.target.value }))} />
+                        </div>
+                        <Button type="button" variant="outline" onClick={() => retryDwollaMutation.mutate()} disabled={retryDwollaMutation.isPending}>
+                          <RefreshCw className="w-4 h-4 mr-2" /> {retryDwollaMutation.isPending ? "Retrying..." : "Retry Verification"}
+                        </Button>
+                      </div>
+                    )}
+                    {dwollaVerificationQuery.data?.documentRequired && (
+                      <div className="space-y-2">
+                        <Label>Verification Document</Label>
+                        <div className="flex items-center gap-2">
+                          <Input ref={dwollaDocumentInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" data-testid="input-dwolla-document" />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              const file = dwollaDocumentInputRef.current?.files?.[0];
+                              if (!file) return toast({ title: "Select a document first", variant: "destructive" });
+                              uploadDwollaDocumentMutation.mutate(file);
+                            }}
+                            disabled={uploadDwollaDocumentMutation.isPending}
+                            data-testid="button-upload-dwolla-document"
+                          >
+                            <Upload className="w-4 h-4 mr-2" /> {uploadDwollaDocumentMutation.isPending ? "Uploading..." : "Upload"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Timeline</p>
+                      {(dwollaVerificationQuery.data?.timeline?.length ?? 0) === 0 ? (
+                        <p className="text-xs text-muted-foreground">No Dwolla verification events recorded yet.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {dwollaVerificationQuery.data.timeline.map((event: any) => (
+                            <div key={event.id || event.eventId} className="rounded-md bg-muted/50 p-2 text-xs">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium">{event.internalTopic?.replace(/_/g, " ") || event.topic}</span>
+                                <Badge variant="outline" className={dwollaStatusClass(event.normalizedStatus)}>{event.normalizedStatus || "pending"}</Badge>
+                              </div>
+                              <p className="text-muted-foreground">{event.occurredAt ? new Date(event.occurredAt).toLocaleString() : "—"}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -100,7 +100,7 @@ import {
   saveBureauApiConfig,
 } from "./bureau-api-config";
 import { institutionalExchangeRouter } from "./routes/institutional-exchange.routes";
-import { dwollaRouter } from "./institutional-exchange/connectors/dwolla/dwolla.routes";
+import { dwollaAdminRouter, dwollaRouter } from "./institutional-exchange/connectors/dwolla/dwolla.routes";
 
 const execFileAsync = promisify(execFile);
 
@@ -283,6 +283,7 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
   await ensureCreditSalesTable();
   app.use("/institutional-exchange", institutionalExchangeRouter);
   app.use("/dwolla", dwollaRouter);
+  app.use("/admin/dwolla", dwollaAdminRouter);
 
   // ─── BOOK CONSULTATION (PUBLIC — NO AUTH) + AUTO-ONBOARDING ──────────────
   app.post("/book-consultation", rateLimit("api", (req) => [req.ip || "unknown", "book-consultation"]), async (req, res) => {

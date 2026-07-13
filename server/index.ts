@@ -198,7 +198,7 @@ function securityStatus() {
     ok: true,
     service: "credit-eoscar-flow",
     environment: process.env.NODE_ENV || "local",
-    csrf: { enabled: true, excludedRoutes: ["/api/v1/stripe/webhook", "/api/stripe/webhook"] },
+    csrf: { enabled: true, excludedRoutes: ["/api/v1/stripe/webhook", "/api/stripe/webhook", "/api/v1/dwolla/webhooks", "/api/dwolla/webhooks"] },
     rbac: { enabled: true, adminMiddleware: "centralized" },
     mfa: {
       ready: true,
@@ -401,7 +401,7 @@ app.use((req, res, next) => {
     "/config",
     "/credit-monitor/config",
     "/document-room",
-    "/dwolla",
+    "/admin/dwolla",
     "/institutional-exchange",
     "/status/agents",
     "/status/automation",
@@ -424,6 +424,7 @@ app.use((req, res, next) => {
       req.path === "/auth/me" ||
       req.path === "/auth/has-users" ||
       req.path === "/stripe/webhook" ||
+      req.path === "/dwolla/webhooks" ||
       req.path === "/book-consultation" ||
       req.path === "/auth/providers" ||
       req.path === "/auth/google" ||

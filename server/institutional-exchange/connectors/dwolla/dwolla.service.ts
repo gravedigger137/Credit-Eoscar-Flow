@@ -294,7 +294,7 @@ export function mapDwollaError(error: unknown) {
         message: candidate.message || "Dwolla request failed.",
         code: candidate.code,
         errors: candidate.errors,
-        dwolla: candidate.body,
+        providerError: summarizeDwollaError(candidate.body),
       },
     };
   }
@@ -302,6 +302,16 @@ export function mapDwollaError(error: unknown) {
     return { status: 400, body: { message: "Validation error", errors: error.errors } };
   }
   return { status: 500, body: { message: "Dwolla request failed.", error: safeErrorMessage(error) } };
+}
+
+function summarizeDwollaError(body: unknown) {
+  if (!body || typeof body !== "object") return undefined;
+  const record = body as Record<string, unknown>;
+  return {
+    code: typeof record.code === "string" ? record.code : undefined,
+    message: typeof record.message === "string" ? record.message : undefined,
+    path: typeof record.path === "string" ? record.path : undefined,
+  };
 }
 
 export const dwollaInstitutionalService = new DwollaInstitutionalService();

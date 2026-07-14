@@ -179,6 +179,59 @@ Describe "Dwolla PowerShell toolkit" {
     $result.Body | Should Be $null
   }
 
+  It "sanitizes generic exceptions that do not expose Response" {
+    Mock Invoke-WebRequest {
+      throw (New-Object System.Exception "plain network failure")
+    }
+    $caught = $false
+    try {
+      Invoke-DwollaWebRequest -Method GET -Uri "https://api-sandbox.dwolla.com/" -Headers @{} -Body $null -ContentType $null
+    } catch {
+      $caught = $true
+      $_.Exception.Message | Should Match "plain network failure"
+      $_.Exception.Message | Should Not Match "property 'Response'"
+    }
+    $caught | Should Be $true
+  }
+
+  It "endpoint probe handles generic exceptions that do not expose Response" {
+    Mock Invoke-WebRequest {
+      throw (New-Object System.Exception "connection refused")
+    }
+    $result = Test-DwollaWebhookEndpoint -Url "https://www.infinitearcadia.com/api/dwolla/webhooks"
+    $result.StatusCode | Should Be $null
+    $result.RejectsUnsignedWebhook | Should Be $false
+    $result.Message | Should Match "Endpoint rejected unsigned webhook request"
+  }
+
+  It "verifies token, root, account, and webhook subscription commands with mocked API calls" {
+    $script:seenUris = New-Object System.Collections.Generic.List[string]
+    Mock Invoke-WebRequest {
+      [void]$script:seenUris.Add([string]$Uri)
+      if ($Uri -match "/token$") {
+        return New-TestResponse -Content '{"access_token":"sandbox-token-abcdef","expires_in":3600,"token_type":"bearer"}'
+      }
+      if ($Method -eq "GET" -and $Uri -eq "https://api-sandbox.dwolla.com") {
+        return New-TestResponse -Content '{"_links":{"account":{"href":"https://api-sandbox.dwolla.com/accounts/44444444-4444-4444-4444-444444444444"}}}'
+      }
+      if ($Method -eq "GET" -and $Uri -eq "https://api-sandbox.dwolla.com/accounts/44444444-4444-4444-4444-444444444444") {
+        return New-TestResponse -Content '{"id":"44444444-4444-4444-4444-444444444444","name":"Sandbox Account"}'
+      }
+      if ($Method -eq "GET" -and $Uri -eq "https://api-sandbox.dwolla.com/webhook-subscriptions") {
+        return New-TestResponse -Content '{"_embedded":{"webhook-subscriptions":[]}}'
+      }
+      throw "Unexpected URI $Uri"
+    }
+
+    (Get-DwollaAccessToken).Obtained | Should Be $true
+    (Get-DwollaApiRoot).Body._links.account.href | Should Be "https://api-sandbox.dwolla.com/accounts/44444444-4444-4444-4444-444444444444"
+    (Get-DwollaAccount).Body.id | Should Be "44444444-4444-4444-4444-444444444444"
+    (Get-DwollaWebhookSubscriptions).Body._embedded."webhook-subscriptions".Count | Should Be 0
+    $script:seenUris.Contains("https://api-sandbox.dwolla.com/token") | Should Be $true
+    (($script:seenUris | Where-Object { $_ -match '^https://api-sandbox\.dwolla\.com/?$' }).Count -gt 0) | Should Be $true
+    $script:seenUris.Contains("https://api-sandbox.dwolla.com/webhook-subscriptions") | Should Be $true
+  }
+
   It "redacts secrets and authorization values" {
     $text = 'Authorization: Bearer abcdef123456 "client_secret":"test-secret" "ssn":"123-45-6789"'
     $safe = Protect-DwollaSensitiveText $text

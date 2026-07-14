@@ -311,6 +311,89 @@ function New-DwollaSanitizedException {
   return $ex
 }
 
+function Get-DwollaExceptionResponse {
+  param([AllowNull()][object]$ErrorObject)
+
+  if ($null -eq $ErrorObject) { return $null }
+
+  $exception = $null
+  if ($ErrorObject -is [System.Management.Automation.ErrorRecord]) {
+    $exception = $ErrorObject.Exception
+  } elseif ($ErrorObject -is [System.Exception]) {
+    $exception = $ErrorObject
+  } else {
+    $exceptionProperty = $ErrorObject.PSObject.Properties["Exception"]
+    if ($null -ne $exceptionProperty) { $exception = $exceptionProperty.Value }
+  }
+
+  while ($null -ne $exception) {
+    $responseProperty = $exception.PSObject.Properties["Response"]
+    if ($null -ne $responseProperty -and $null -ne $responseProperty.Value) {
+      return $responseProperty.Value
+    }
+    $exception = $exception.InnerException
+  }
+
+  return $null
+}
+
+function Get-DwollaErrorStatusCode {
+  param([AllowNull()][object]$ErrorObject)
+
+  $response = Get-DwollaExceptionResponse -ErrorObject $ErrorObject
+  if ($null -eq $response) { return $null }
+
+  $statusProperty = $response.PSObject.Properties["StatusCode"]
+  if ($null -eq $statusProperty -or $null -eq $statusProperty.Value) { return $null }
+
+  $statusCode = $statusProperty.Value
+  try { return [int]$statusCode } catch {}
+
+  $valueProperty = $statusCode.PSObject.Properties["value__"]
+  if ($null -ne $valueProperty -and $null -ne $valueProperty.Value) {
+    try { return [int]$valueProperty.Value } catch {}
+  }
+
+  return $null
+}
+
+function Get-DwollaErrorResponseText {
+  param([AllowNull()][object]$ErrorObject)
+
+  $response = Get-DwollaExceptionResponse -ErrorObject $ErrorObject
+  if ($null -eq $response) { return $null }
+
+  try {
+    $contentProperty = $response.PSObject.Properties["Content"]
+    if ($null -ne $contentProperty -and $null -ne $contentProperty.Value) {
+      $content = $contentProperty.Value
+      if ($content -is [string]) { return $content }
+      $readMethod = $content.PSObject.Methods["ReadAsStringAsync"]
+      if ($null -ne $readMethod) {
+        $task = $content.ReadAsStringAsync()
+        $awaiterMethod = $task.PSObject.Methods["GetAwaiter"]
+        if ($null -ne $awaiterMethod) {
+          return $task.GetAwaiter().GetResult()
+        }
+        return $task.Result
+      }
+    }
+  } catch {}
+
+  try {
+    $streamMethod = $response.PSObject.Methods["GetResponseStream"]
+    if ($null -ne $streamMethod) {
+      $stream = $response.GetResponseStream()
+      if ($stream) {
+        $reader = New-Object System.IO.StreamReader($stream)
+        return $reader.ReadToEnd()
+      }
+    }
+  } catch {}
+
+  return $null
+}
+
 function Invoke-DwollaWebRequest {
   param(
     [Parameter(Mandatory = $true)][string]$Method,
@@ -326,18 +409,8 @@ function Invoke-DwollaWebRequest {
     }
     return Invoke-WebRequest -Method $Method -Uri $Uri -Headers $Headers -UseBasicParsing
   } catch {
-    $statusCode = $null
-    $responseText = $null
-    if ($_.Exception.Response) {
-      try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-      try {
-        $stream = $_.Exception.Response.GetResponseStream()
-        if ($stream) {
-          $reader = New-Object System.IO.StreamReader($stream)
-          $responseText = $reader.ReadToEnd()
-        }
-      } catch {}
-    }
+    $statusCode = Get-DwollaErrorStatusCode -ErrorObject $_
+    $responseText = Get-DwollaErrorResponseText -ErrorObject $_
     $message = $_.Exception.Message
     if ($responseText) { $message = "$message $responseText" }
     throw (New-DwollaSanitizedException -Message $message -StatusCode $statusCode)
@@ -612,10 +685,7 @@ function Test-DwollaWebhookEndpoint {
       Message = "Endpoint accepted an unsigned webhook request; this is not expected."
     }
   } catch {
-    $statusCode = $null
-    if ($_.Exception.Response) {
-      try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-    }
+    $statusCode = Get-DwollaErrorStatusCode -ErrorObject $_
     return [pscustomobject]@{
       Url = $Url
       StatusCode = $statusCode

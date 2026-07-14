@@ -281,10 +281,40 @@ function Get-DwollaHeaderValue {
   return $null
 }
 
+function ConvertTo-DwollaResponseText {
+  param([AllowNull()][object]$Content)
+
+  if ($null -eq $Content) { return $null }
+
+  if ($Content -is [byte[]]) {
+    if ($Content.Length -eq 0) { return $null }
+    $text = [System.Text.Encoding]::UTF8.GetString([byte[]]$Content)
+  } elseif ($Content -is [char[]]) {
+    if ($Content.Length -eq 0) { return $null }
+    $text = -join ([char[]]$Content)
+  } elseif ($Content -is [string]) {
+    $text = [string]$Content
+  } else {
+    try { $text = $Content | ConvertTo-Json -Depth 20 -Compress } catch { $text = [string]$Content }
+  }
+
+  if ($null -eq $text) { return $null }
+  $text = $text.TrimStart([char]0xFEFF)
+  if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+  return $text
+}
+
 function ConvertFrom-DwollaResponseBody {
-  param([AllowNull()][string]$Content)
-  if ([string]::IsNullOrWhiteSpace($Content)) { return $null }
-  try { return ($Content | ConvertFrom-Json) } catch { return $Content }
+  param([AllowNull()][object]$Content)
+
+  if ($null -eq $Content) { return $null }
+  if ($Content -isnot [string] -and $Content -isnot [byte[]] -and $Content -isnot [char[]]) {
+    return $Content
+  }
+
+  $text = ConvertTo-DwollaResponseText -Content $Content
+  if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+  try { return ($text | ConvertFrom-Json) } catch { return $text }
 }
 
 function New-DwollaHttpResult {
@@ -292,12 +322,13 @@ function New-DwollaHttpResult {
   $location = Get-DwollaHeaderValue -Headers $Response.Headers -Name "Location"
   $requestId = Get-DwollaHeaderValue -Headers $Response.Headers -Name "X-Request-Id"
   if (-not $requestId) { $requestId = Get-DwollaHeaderValue -Headers $Response.Headers -Name "Dwolla-Correlation-Id" }
+  $rawBody = ConvertTo-DwollaResponseText -Content $Response.Content
   [pscustomobject]@{
     StatusCode = [int]$Response.StatusCode
     Location = $location
     RequestId = $requestId
     Body = ConvertFrom-DwollaResponseBody -Content $Response.Content
-    RawBody = $Response.Content
+    RawBody = $rawBody
   }
 }
 

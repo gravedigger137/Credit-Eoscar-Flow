@@ -24,7 +24,7 @@ function Clear-TestDwollaEnvironment {
 function New-TestResponse {
   param(
     [int]$StatusCode = 200,
-    [string]$Content = "{}",
+    [AllowNull()][object]$Content = "{}",
     [hashtable]$Headers = @{}
   )
   [pscustomobject]@{
@@ -177,6 +177,67 @@ Describe "Dwolla PowerShell toolkit" {
     $result.StatusCode | Should Be 201
     $result.Location | Should Be "https://api-sandbox.dwolla.com/example/location"
     $result.Body | Should Be $null
+  }
+
+  It "decodes UTF-8 byte array HAL JSON response bodies" {
+    $json = '{"_links":{"account":{"href":"https://api-sandbox.dwolla.com/accounts/44444444-4444-4444-4444-444444444444"}}}'
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    $result = New-DwollaHttpResult -Response (New-TestResponse -Content $bytes)
+
+    $result.RawBody | Should Be $json
+    $result.Body._links.account.href | Should Be "https://api-sandbox.dwolla.com/accounts/44444444-4444-4444-4444-444444444444"
+  }
+
+  It "trims UTF-8 BOM from byte array JSON response bodies" {
+    $json = '{"status":"bom"}'
+    $bytes = [byte[]](@(0xEF, 0xBB, 0xBF) + [System.Text.Encoding]::UTF8.GetBytes($json))
+    $result = New-DwollaHttpResult -Response (New-TestResponse -Content $bytes)
+
+    $result.RawBody | Should Be $json
+    $result.Body.status | Should Be "bom"
+  }
+
+  It "parses char array JSON response bodies" {
+    $chars = [char[]]'{"status":"chars"}'
+    $result = New-DwollaHttpResult -Response (New-TestResponse -Content $chars)
+
+    $result.RawBody | Should Be '{"status":"chars"}'
+    $result.Body.status | Should Be "chars"
+  }
+
+  It "parses string JSON response bodies" {
+    $result = New-DwollaHttpResult -Response (New-TestResponse -Content '{"status":"ok"}')
+
+    $result.RawBody | Should Be '{"status":"ok"}'
+    $result.Body.status | Should Be "ok"
+  }
+
+  It "treats empty byte array response bodies as null" {
+    $emptyBytes = New-Object byte[] 0
+    $result = New-DwollaHttpResult -Response (New-TestResponse -Content $emptyBytes)
+
+    $result.RawBody | Should Be $null
+    $result.Body | Should Be $null
+  }
+
+  It "returns decoded raw text for non-JSON byte array response bodies" {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes("not json")
+    $result = New-DwollaHttpResult -Response (New-TestResponse -Content $bytes)
+
+    $result.RawBody | Should Be "not json"
+    $result.Body | Should Be "not json"
+  }
+
+  It "returns already-parsed response bodies unchanged" {
+    $parsed = [pscustomobject]@{ status = "parsed"; ok = $true }
+    $body = ConvertFrom-DwollaResponseBody -Content $parsed
+    $result = New-DwollaHttpResult -Response (New-TestResponse -Content $parsed)
+
+    $body.status | Should Be "parsed"
+    $body.ok | Should Be $true
+    $result.Body.status | Should Be "parsed"
+    $result.Body.ok | Should Be $true
+    $result.RawBody | Should Match '"status":"parsed"'
   }
 
   It "omits body and content type for GET requests with null ContentType" {

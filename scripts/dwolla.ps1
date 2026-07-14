@@ -404,8 +404,11 @@ function Invoke-DwollaWebRequest {
   )
 
   try {
-    if ($null -ne $Body) {
-      return Invoke-WebRequest -Method $Method -Uri $Uri -Headers $Headers -Body $Body -ContentType $ContentType -UseBasicParsing
+    if (-not [string]::IsNullOrEmpty($Body)) {
+      if (-not [string]::IsNullOrWhiteSpace($ContentType)) {
+        return Invoke-WebRequest -Method $Method -Uri $Uri -Headers $Headers -Body $Body -ContentType $ContentType -UseBasicParsing
+      }
+      return Invoke-WebRequest -Method $Method -Uri $Uri -Headers $Headers -Body $Body -UseBasicParsing
     }
     return Invoke-WebRequest -Method $Method -Uri $Uri -Headers $Headers -UseBasicParsing
   } catch {

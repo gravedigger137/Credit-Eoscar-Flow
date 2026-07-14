@@ -179,6 +179,141 @@ Describe "Dwolla PowerShell toolkit" {
     $result.Body | Should Be $null
   }
 
+  It "omits body and content type for GET requests with null ContentType" {
+    $script:requestParameters = $null
+
+    try {
+      function Invoke-WebRequest {
+        param(
+          [string]$Method,
+          [string]$Uri,
+          [hashtable]$Headers,
+          [AllowNull()][string]$Body,
+          [AllowNull()][string]$ContentType,
+          [switch]$UseBasicParsing
+        )
+        $script:requestParameters = @{
+          Method = $Method
+          Body = $Body
+          ContentType = $ContentType
+          HasBody = $PSBoundParameters.ContainsKey("Body")
+          HasContentType = $PSBoundParameters.ContainsKey("ContentType")
+        }
+        return New-TestResponse -Content "{}"
+      }
+
+      [void](Invoke-DwollaWebRequest -Method GET -Uri "https://api-sandbox.dwolla.com/customers" -Headers @{} -Body $null -ContentType $null)
+    } finally {
+      Remove-Item Function:\Invoke-WebRequest -ErrorAction SilentlyContinue
+    }
+
+    $script:requestParameters.Method | Should Be "GET"
+    $script:requestParameters.HasBody | Should Be $false
+    $script:requestParameters.HasContentType | Should Be $false
+  }
+
+  It "omits body and content type for GET requests with empty ContentType" {
+    $script:requestParameters = $null
+
+    try {
+      function Invoke-WebRequest {
+        param(
+          [string]$Method,
+          [string]$Uri,
+          [hashtable]$Headers,
+          [AllowNull()][string]$Body,
+          [AllowNull()][string]$ContentType,
+          [switch]$UseBasicParsing
+        )
+        $script:requestParameters = @{
+          Method = $Method
+          Body = $Body
+          ContentType = $ContentType
+          HasBody = $PSBoundParameters.ContainsKey("Body")
+          HasContentType = $PSBoundParameters.ContainsKey("ContentType")
+        }
+        return New-TestResponse -Content "{}"
+      }
+
+      [void](Invoke-DwollaWebRequest -Method GET -Uri "https://api-sandbox.dwolla.com/customers" -Headers @{} -Body $null -ContentType "")
+    } finally {
+      Remove-Item Function:\Invoke-WebRequest -ErrorAction SilentlyContinue
+    }
+
+    $script:requestParameters.Method | Should Be "GET"
+    $script:requestParameters.HasBody | Should Be $false
+    $script:requestParameters.HasContentType | Should Be $false
+  }
+
+  It "keeps JSON content type for POST requests with a body" {
+    $script:requestParameters = $null
+
+    try {
+      function Invoke-WebRequest {
+        param(
+          [string]$Method,
+          [string]$Uri,
+          [hashtable]$Headers,
+          [AllowNull()][string]$Body,
+          [AllowNull()][string]$ContentType,
+          [switch]$UseBasicParsing
+        )
+        $script:requestParameters = @{
+          Method = $Method
+          Body = $Body
+          ContentType = $ContentType
+          HasBody = $PSBoundParameters.ContainsKey("Body")
+          HasContentType = $PSBoundParameters.ContainsKey("ContentType")
+        }
+        return New-TestResponse -Content "{}"
+      }
+
+      [void](Invoke-DwollaWebRequest -Method POST -Uri "https://api-sandbox.dwolla.com/customers" -Headers @{} -Body '{"test":"ok"}' -ContentType "application/vnd.dwolla.v1.hal+json")
+    } finally {
+      Remove-Item Function:\Invoke-WebRequest -ErrorAction SilentlyContinue
+    }
+
+    $script:requestParameters.Method | Should Be "POST"
+    $script:requestParameters.HasBody | Should Be $true
+    $script:requestParameters.HasContentType | Should Be $true
+    $script:requestParameters.Body | Should Be '{"test":"ok"}'
+    $script:requestParameters.ContentType | Should Be "application/vnd.dwolla.v1.hal+json"
+  }
+
+  It "omits content type for requests with a body and no ContentType" {
+    $script:requestParameters = $null
+
+    try {
+      function Invoke-WebRequest {
+        param(
+          [string]$Method,
+          [string]$Uri,
+          [hashtable]$Headers,
+          [AllowNull()][string]$Body,
+          [AllowNull()][string]$ContentType,
+          [switch]$UseBasicParsing
+        )
+        $script:requestParameters = @{
+          Method = $Method
+          Body = $Body
+          ContentType = $ContentType
+          HasBody = $PSBoundParameters.ContainsKey("Body")
+          HasContentType = $PSBoundParameters.ContainsKey("ContentType")
+        }
+        return New-TestResponse -Content "{}"
+      }
+
+      [void](Invoke-DwollaWebRequest -Method POST -Uri "https://api-sandbox.dwolla.com/customers" -Headers @{} -Body '{"test":"ok"}' -ContentType $null)
+    } finally {
+      Remove-Item Function:\Invoke-WebRequest -ErrorAction SilentlyContinue
+    }
+
+    $script:requestParameters.Method | Should Be "POST"
+    $script:requestParameters.HasBody | Should Be $true
+    $script:requestParameters.HasContentType | Should Be $false
+    $script:requestParameters.Body | Should Be '{"test":"ok"}'
+  }
+
   It "sanitizes generic exceptions that do not expose Response" {
     Mock Invoke-WebRequest {
       throw (New-Object System.Exception "plain network failure")

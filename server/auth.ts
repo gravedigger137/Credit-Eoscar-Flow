@@ -55,8 +55,10 @@ authRouter.post("/auth/register", async (req: Request, res: Response) => {
     const user = await storage.createUser({ username, password: hashed, fullName, email, phone, role });
 
     if (isFirstUser) {
+      const csrfSecret = req.session.csrfSecret;
       req.session.regenerate((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
+        if (csrfSecret) req.session.csrfSecret = csrfSecret;
         req.session.userId = user.id;
         req.session.mfaVerified = !user.mfaEnabled;
         req.session.save(() => {
@@ -87,8 +89,10 @@ authRouter.post("/auth/login", async (req: Request, res: Response) => {
     if (!match) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
+    const csrfSecret = req.session.csrfSecret;
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ message: "Session error" });
+      if (csrfSecret) req.session.csrfSecret = csrfSecret;
       req.session.userId = user.id;
       req.session.mfaVerified = !user.mfaEnabled;
       req.session.save(() => {

@@ -10,6 +10,10 @@ function apiUrl(url: string) {
 
 let csrfToken: string | null = null;
 
+export function resetCsrfToken() {
+  csrfToken = null;
+}
+
 async function getCsrfToken() {
   if (csrfToken) return csrfToken;
   const res = await fetch(apiUrl("/api/auth/csrf"), { credentials: "include" });
@@ -91,3 +95,4 @@ export const queryClient = new QueryClient({
     },
   },
 });
+

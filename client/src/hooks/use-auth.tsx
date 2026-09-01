@@ -1,6 +1,6 @@
 ﻿import { createContext, useContext, ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resetCsrfToken } from "@/lib/queryClient";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL || "";
@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/auth/logout");
+      resetCsrfToken();
     },
     onSuccess: () => {
       qc.setQueryData(["/api/auth/me"], null);
@@ -98,3 +99,5 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be inside AuthProvider");
   return ctx;
 }
+
+

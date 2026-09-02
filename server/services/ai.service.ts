@@ -34,11 +34,14 @@ export class OpenAIProvider implements AIProvider {
     temperature?: number;
     json?: boolean;
   }) {
+    const model = input.model || process.env.AI_MODEL || "gpt-4o";
+    const usesCompletionTokens = /^(gpt-5|o1|o3|o4)/i.test(model);
     const resp = await this.getClient().chat.completions.create({
-      model: input.model || process.env.AI_MODEL || "gpt-4o",
+      model,
       messages: input.messages,
-      max_tokens: input.maxTokens,
-      temperature: input.temperature,
+      ...(usesCompletionTokens
+        ? { max_completion_tokens: input.maxTokens }
+        : { max_tokens: input.maxTokens, temperature: input.temperature }),
       response_format: input.json ? { type: "json_object" } : undefined,
     });
 

@@ -44,6 +44,12 @@ function handleError(res: import("express").Response, err: unknown) {
       code: "model_unavailable",
     });
   }
+  if (code === "unsupported_parameter") {
+    return res.status(400).json({
+      message: `The configured AI model does not support the ${providerError?.message?.includes("max_tokens") ? "token-limit" : "requested"} parameter.`,
+      code: "unsupported_parameter",
+    });
+  }
   if (providerError?.message?.includes("OPENAI_API_KEY is required")) {
     return res.status(503).json({
       message: "The AI provider is not configured on the server.",

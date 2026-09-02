@@ -7,6 +7,7 @@ import {
   validateMetro2Record,
 } from "../ai";
 import { recordUsageEvent } from "../usage-metering";
+import { safeErrorMessage } from "../security-utils";
 
 export const aiRouter = Router();
 
@@ -14,8 +15,50 @@ function handleError(res: import("express").Response, err: unknown) {
   if (err instanceof ZodError) {
     return res.status(400).json({ message: "Validation error", errors: err.errors });
   }
-  console.error(err);
-  return res.status(500).json({ message: "Internal server error" });
+
+  const providerError = err as { code?: string; status?: number; message?: string };
+  const code = providerError?.code;
+  const status = providerError?.status;
+
+  if (code === "insufficient_quota") {
+    return res.status(402).json({
+      message: "OpenAI quota is exhausted. Add credits in OpenAI billing and try again.",
+      code: "quota_exceeded",
+    });
+  }
+  if (code === "invalid_api_key" || status === 401) {
+    return res.status(401).json({
+      message: "OpenAI authentication failed. Update the configured server secret and redeploy.",
+      code: "invalid_key",
+    });
+  }
+  if (code === "rate_limit_exceeded" || status === 429) {
+    return res.status(429).json({
+      message: "The AI provider rate limit was reached. Try again shortly.",
+      code: "rate_limited",
+    });
+  }
+  if (code === "model_not_found") {
+    return res.status(502).json({
+      message: "The configured AI model is unavailable.",
+      code: "model_unavailable",
+    });
+  }
+  if (providerError?.message?.includes("OPENAI_API_KEY is required")) {
+    return res.status(503).json({
+      message: "The AI provider is not configured on the server.",
+      code: "ai_not_configured",
+    });
+  }
+  if (status === 400) {
+    return res.status(400).json({
+      message: "The AI provider rejected the request.",
+      code: "provider_bad_request",
+    });
+  }
+
+  console.error("AI request failed:", safeErrorMessage(err));
+  return res.status(502).json({ message: "The AI provider could not complete the request.", code: "provider_error" });
 }
 
 aiRouter.post("/dispute-letter", async (req, res) => {

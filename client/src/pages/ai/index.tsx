@@ -17,6 +17,17 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// server/index.ts mounts aiRouter at /api + /ai. Keep every Command Center
+// request on the same verified runtime route family.
+const AI_API_BASE = "/api/ai";
+
+function showAIError(toast: ReturnType<typeof useToast>["toast"], title: string, error: unknown) {
+  const description = error instanceof Error && error.message.trim()
+    ? error.message
+    : "The AI request could not be completed.";
+  toast({ title, description, variant: "destructive" });
+}
+
 const BUREAUS = [
   { value: "equifax", label: "Equifax" },
   { value: "experian", label: "Experian" },
@@ -105,13 +116,13 @@ export default function AIPage() {
 
   const chatMutation = useMutation({
     mutationFn: async (messages: typeof chatMessages) => {
-      const res = await apiRequest("POST", "/api/ai/chat", { messages: messages.filter(m => m.role !== "assistant" || messages.indexOf(m) > 0) });
+      const res = await apiRequest("POST", `${AI_API_BASE}/chat`, { messages: messages.filter(m => m.role !== "assistant" || messages.indexOf(m) > 0) });
       return res.json();
     },
     onSuccess: (data) => {
       setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
     },
-    onError: () => toast({ title: "AI error — check OpenAI key", variant: "destructive" }),
+    onError: (error) => showAIError(toast, "AI chat failed", error),
   });
 
   function sendChat() {
@@ -133,11 +144,11 @@ export default function AIPage() {
     mutationFn: async () => {
       const client = (clients as any[]).find((c: any) => c.id === letterForm.clientId);
       const clientName = client ? `${client.firstName} ${client.lastName}` : "Client Name";
-      const res = await apiRequest("POST", "/api/ai/dispute-letter", { ...letterForm, clientName });
+      const res = await apiRequest("POST", `${AI_API_BASE}/dispute-letter`, { ...letterForm, clientName });
       return res.json();
     },
     onSuccess: (data) => setGeneratedLetter(data.letter),
-    onError: () => toast({ title: "Failed to generate letter", variant: "destructive" }),
+    onError: (error) => showAIError(toast, "Failed to generate letter", error),
   });
 
   // ── Analysis state ──
@@ -156,11 +167,11 @@ export default function AIPage() {
       if (analysisForm.exp) scores.experian = parseInt(analysisForm.exp);
       if (analysisForm.tu) scores.transunion = parseInt(analysisForm.tu);
       const negativeItems = analysisForm.negativeItems.split("\n").map(s => s.trim()).filter(Boolean);
-      const res = await apiRequest("POST", "/api/ai/analyze-client", { clientName, scores, negativeItems, goal: analysisForm.goal });
+      const res = await apiRequest("POST", `${AI_API_BASE}/analyze-client`, { clientName, scores, negativeItems, goal: analysisForm.goal });
       return res.json();
     },
     onSuccess: (data) => setAnalysis(data.analysis),
-    onError: () => toast({ title: "Analysis failed", variant: "destructive" }),
+    onError: (error) => showAIError(toast, "Analysis failed", error),
   });
 
   // ── Metro 2 Validator state ──
@@ -169,11 +180,11 @@ export default function AIPage() {
 
   const metro2Mutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ai/validate-metro2", { record: metro2Record });
+      const res = await apiRequest("POST", `${AI_API_BASE}/validate-metro2`, { record: metro2Record });
       return res.json();
     },
     onSuccess: (data) => setMetro2Result(data.result),
-    onError: () => toast({ title: "Validation failed", variant: "destructive" }),
+    onError: (error) => showAIError(toast, "Validation failed", error),
   });
 
   return (

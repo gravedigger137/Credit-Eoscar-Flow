@@ -209,6 +209,7 @@ function securityStatus() {
     sessions: {
       secureCookies: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      partitioned: process.env.NODE_ENV === "production",
       httpOnly: true,
     },
     sensitiveConfigEncryption: {
@@ -305,6 +306,7 @@ store: new PgStore({ conString: process.env.DATABASE_URL }),
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      partitioned: process.env.NODE_ENV === "production",
     },
   })
 );

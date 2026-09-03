@@ -45,6 +45,7 @@ export function issueCsrfToken(req: Request, res: Response) {
     httpOnly: false,
     secure: process.env.NODE_ENV === "production",
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    partitioned: process.env.NODE_ENV === "production",
     path: "/",
   });
   return token;

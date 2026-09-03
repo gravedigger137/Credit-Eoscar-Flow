@@ -56,8 +56,13 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     const user = await getRequestUser(req);
     if (!user) return res.status(401).json({ message: "Authentication required" });
     if (!isAdminUser(user)) return res.status(403).json({ message: "Admin access required" });
-    if (process.env.MFA_ENFORCE_ADMIN === "true" && user.mfaEnabled && !req.session?.mfaVerified) {
-      return res.status(403).json({ message: "MFA verification required", code: "MFA_REQUIRED" });
+    if (process.env.MFA_ENFORCE_ADMIN === "true") {
+      if (!user.mfaEnabled) {
+        return res.status(403).json({ message: "MFA enrollment required", code: "MFA_ENROLLMENT_REQUIRED" });
+      }
+      if (!req.session?.mfaVerified) {
+        return res.status(403).json({ message: "MFA verification required", code: "MFA_REQUIRED" });
+      }
     }
     return next();
   } catch (err) {

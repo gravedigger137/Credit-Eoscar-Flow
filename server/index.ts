@@ -25,6 +25,7 @@ import { getAllBureauConfigStatuses } from "./bureau-api-config";
 import { getPlaidConfigStatus } from "./provider-config";
 import { getEoscarMetro2IntegrationStatus } from "./eoscar-metro2-readiness";
 import { startInstitutionalExchangeWorker } from "./institutional-exchange/worker";
+import { privateUploadStatus, verifySignedDownloadToken } from "./private-upload-storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -218,7 +219,7 @@ function securityStatus() {
       maxBytes: Number(process.env.UPLOAD_MAX_BYTES || 25 * 1024 * 1024),
       archiveUploadsEnabled: process.env.ALLOW_ARCHIVE_UPLOADS === "true",
       malwareScannerConfigured: !!process.env.MALWARE_SCAN_COMMAND || (!!process.env.MALWARE_SCAN_PROVIDER && process.env.MALWARE_SCAN_PROVIDER !== "disabled"),
-      storage: process.env.PRIVATE_UPLOAD_STORAGE || "local",
+      ...privateUploadStatus(),
       signedUrlsEnabled: process.env.SIGNED_DOWNLOAD_URLS_ENABLED === "true",
     },
     monitoring: {
@@ -416,6 +417,8 @@ app.use((req, res, next) => {
   }
 
   const authGate = (req: Request, res: Response, next: NextFunction) => {
+    const signedDownloadMatch = req.method === "GET" ? req.path.match(/^\/documents\/([^/]+)\/download$/) : null;
+    const signedDownloadToken = typeof req.query.token === "string" ? req.query.token : "";
     if (
       req.path === "/auth/login" ||
       req.path === "/auth/register" ||
@@ -438,7 +441,10 @@ app.use((req, res, next) => {
       req.path === "/auth/linkedin" ||
       req.path === "/auth/linkedin/callback" ||
       req.path === "/auth/apple" ||
-      req.path === "/auth/apple/callback"
+      req.path === "/auth/apple/callback" ||
+      (process.env.SIGNED_DOWNLOAD_URLS_ENABLED === "true" &&
+        !!signedDownloadMatch &&
+        verifySignedDownloadToken(signedDownloadMatch[1], signedDownloadToken))
     ) {
       return next();
     }

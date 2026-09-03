@@ -1,17 +1,28 @@
-name: Publish container image
+name: Build and deploy Azure backend
 
 on:
   push:
     branches:
       - main
+      - phase2/azure-stabilization
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
+  id-token: write
+
+concurrency:
+  group: azure-backend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/gravedigger137/credit-eoscar-flow
+  AZURE_RESOURCE_GROUP: rg-infinite-arcadia-prod
+  AZURE_CONTAINER_APP: credit-eoscar-api-vnet
 
 jobs:
-  publish:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -19,6 +30,13 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Validate application
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run build
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -34,8 +52,71 @@ jobs:
           file: ./Dockerfile
           push: true
           platforms: linux/amd64
-          tags: |
-            ghcr.io/gravedigger137/credit-eoscar-flow:latest
-            ghcr.io/gravedigger137/credit-eoscar-flow:${{ github.sha }}
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy immutable image to existing Container App
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          az config set extension.use_dynamic_install=yes_without_prompt
+          previous_image="$(az containerapp show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          echo "previous_image=$previous_image" >> "$GITHUB_OUTPUT"
+          az containerapp update \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --image "$IMAGE_NAME:${GITHUB_SHA}" \
+            --revision-suffix "${GITHUB_SHA:0:12}" \
+            --output none
+          deployed_image="$(az containerapp show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+          test "$deployed_image" = "$IMAGE_NAME:${GITHUB_SHA}"
+          fqdn="$(az containerapp show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --query 'properties.configuration.ingress.fqdn' \
+            --output tsv)"
+          echo "health_url=https://${fqdn}/health" >> "$GITHUB_OUTPUT"
+
+      - name: Verify deployed revision health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..24}; do
+            status="$(curl --silent --show-error --output health.json --write-out '%{http_code}' \
+              --max-time 20 "${{ steps.deploy.outputs.health_url }}" || true)"
+            if [ "$status" = "200" ] && jq -e '.ok == true' health.json >/dev/null; then
+              echo "Azure backend health check passed (HTTP 200)."
+              exit 0
+            fi
+            echo "Health attempt ${attempt}/24 returned HTTP ${status}."
+            sleep 5
+          done
+          echo "Azure backend did not become healthy."
+          exit 1
+
+      - name: Restore previous image after failed health check
+        if: failure() && steps.deploy.outputs.previous_image != ''
+        shell: bash
+        run: |
+          az containerapp update \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --image "${{ steps.deploy.outputs.previous_image }}" \
+            --output none

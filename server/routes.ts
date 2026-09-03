@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { storage } from "./storage";
@@ -83,7 +84,7 @@ import {
 } from "./document-room-service";
 import { db } from "./db";
 import { sql, eq } from "drizzle-orm";
-import { onboardingSteps, bankAccounts, cryptoWallets, loanApplications, uiCustomization } from "@shared/schema";
+import { onboardingSteps, bankAccounts, cryptoWallets, loanApplications, uiCustomization, auditEvents } from "@shared/schema";
 import { getPublicAppUrl } from "./config";
 import { decryptIfEncrypted, encryptIfSensitive, isSensitiveConfigKey, maskSecret } from "./secret-store";
 import { rateLimit } from "./rate-limit";
@@ -101,6 +102,15 @@ import {
 } from "./bureau-api-config";
 import { institutionalExchangeRouter } from "./routes/institutional-exchange.routes";
 import { dwollaAdminRouter, dwollaRouter } from "./institutional-exchange/connectors/dwolla/dwolla.routes";
+import { getRequestUser, isAdminUser } from "./authorization";
+import {
+  createPrivateObjectName,
+  createSignedDownloadToken,
+  deletePrivateUpload,
+  openPrivateDownload,
+  persistPrivateUpload,
+  verifySignedDownloadToken,
+} from "./private-upload-storage";
 
 const execFileAsync = promisify(execFile);
 
@@ -151,14 +161,6 @@ function safeDownloadName(name: string): string {
   return path.basename(name).replace(/[\r\n"]/g, "_");
 }
 
-function getStoredUploadPath(fileName: string) {
-  const resolvedPath = path.resolve(uploadsDir, fileName);
-  if (!resolvedPath.startsWith(`${uploadsDir}${path.sep}`)) {
-    throw new Error("Invalid stored file path");
-  }
-  return resolvedPath;
-}
-
 function hasAllowedMagicBytes(filePath: string, extension: string) {
   const signatures = magicBytesByExtension[extension];
   if (!signatures) return true;
@@ -193,17 +195,26 @@ async function validateUploadedFile(file: Express.Multer.File) {
   return scan;
 }
 
-async function auditDocumentAction(action: string, message: string) {
+async function auditDocumentAction(action: string, documentId: string, clientId: string, actorUserId?: string) {
   try {
-    await storage.createNotification({ type: "compliance", title: action, message, read: false });
-  } catch {}
+    await db.insert(auditEvents).values({
+      actorUserId: actorUserId || null,
+      action,
+      entityType: "client_document",
+      entityId: documentId,
+      afterValue: { clientId },
+      highRisk: action === "client_document.deleted",
+    });
+  } catch (error) {
+    console.error("Document audit logging failed:", safeErrorMessage(error));
+  }
 }
 
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadsDir),
     filename: (_req, file, cb) => {
-      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const unique = crypto.randomUUID();
       cb(null, unique + path.extname(file.originalname).toLowerCase());
     },
   }),
@@ -215,6 +226,15 @@ const upload = multer({
     else cb(new Error("File type not allowed. Accepted: PDF, images, Word docs, text, XML, CSV, JSON, and Excel files."));
   },
 });
+
+async function requireDocumentAccess(req: Request) {
+  const user = await getRequestUser(req);
+  const role = user?.role?.toLowerCase();
+  if (!user || (!isAdminUser(user) && role !== "staff")) {
+    throw Object.assign(new Error("Document access requires staff authorization"), { status: 403 });
+  }
+  return user;
+}
 
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -1386,6 +1406,7 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
   // ─── CLIENT DOCUMENT UPLOAD ─────────────────────────────────────────────
   app.get("/clients/:clientId/documents", async (req, res) => {
     try {
+      await requireDocumentAccess(req);
       const clientId = getRouteParam(req.params.clientId);
       const docs = await storage.getDocumentsByClient(clientId);
       res.json(docs);
@@ -1394,8 +1415,10 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
 
   app.post("/clients/:clientId/documents", rateLimit("upload", (req) => [req.session?.userId || req.ip || "unknown", "client-documents"]), upload.single("file"), async (req, res) => {
     const file = req.file;
+    let persistedObjectName: string | undefined;
     try {
       if (!file) return res.status(400).json({ message: "No file uploaded" });
+      await requireDocumentAccess(req);
       await validateUploadedFile(file);
       const clientId = getRouteParam(req.params.clientId);
       const client = await storage.getClient(clientId);
@@ -1406,9 +1429,12 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
       const validCategories = ["credit_report", "id_document", "proof_of_address", "dispute_letter", "bureau_response", "other"];
       const category = validCategories.includes(req.body.category) ? req.body.category : "credit_report";
       const notes = typeof req.body.notes === "string" ? req.body.notes.slice(0, 500) : null;
+      const objectName = createPrivateObjectName(file.originalname);
+      await persistPrivateUpload(file.path, objectName, file.mimetype);
+      persistedObjectName = objectName;
       const doc = await storage.createDocument({
         clientId,
-        fileName: file.filename,
+        fileName: objectName,
         originalName: file.originalname,
         mimeType: file.mimetype,
         fileSize: file.size,
@@ -1423,17 +1449,20 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
           read: false,
         });
       } catch (_) {}
-      await auditDocumentAction("Document Upload Audited", `Document ${file.originalname} uploaded for client ${clientId}`);
+      await auditDocumentAction("client_document.uploaded", doc.id, clientId, req.session?.userId);
 
       if (category === "credit_report" && /\.(pdf|xml|txt)$/i.test(file.originalname)) {
         autoAnalyzeAndDispute(clientId, file.path, file.originalname).catch((err) => {
           console.error("[Auto-Analyze] Background pipeline error:", err.message);
-        });
+        }).finally(() => fs.promises.rm(file.path, { force: true }).catch(() => {}));
+      } else {
+        await fs.promises.rm(file.path, { force: true });
       }
 
       res.json(doc);
     } catch (e) {
       if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      if (persistedObjectName) await deletePrivateUpload(persistedObjectName).catch(() => {});
       handleError(res, e);
     }
   });
@@ -1442,23 +1471,41 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
     try {
       const doc = await storage.getDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
-      const filePath = getStoredUploadPath(doc.fileName);
-      if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found on disk" });
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      const validSignedAccess = process.env.SIGNED_DOWNLOAD_URLS_ENABLED === "true" && verifySignedDownloadToken(doc.id, token);
+      if (!validSignedAccess) await requireDocumentAccess(req);
+      if (token && !validSignedAccess) {
+        return res.status(403).json({ message: "Download link is invalid or expired" });
+      }
       res.setHeader("Content-Disposition", `attachment; filename="${safeDownloadName(doc.originalName)}"`);
       res.setHeader("Content-Type", doc.mimeType);
-      await auditDocumentAction("Document Download Audited", `Document ${doc.id} downloaded`);
-      fs.createReadStream(filePath).pipe(res);
+      res.setHeader("Cache-Control", "private, no-store");
+      await auditDocumentAction("client_document.downloaded", doc.id, doc.clientId, req.session?.userId);
+      (await openPrivateDownload(doc.fileName)).pipe(res);
+    } catch (e) { handleError(res, e); }
+  });
+
+  app.post("/documents/:id/download-link", async (req, res) => {
+    try {
+      await requireDocumentAccess(req);
+      const doc = await storage.getDocument(req.params.id);
+      if (!doc) return res.status(404).json({ message: "Document not found" });
+      if (process.env.SIGNED_DOWNLOAD_URLS_ENABLED !== "true") {
+        return res.status(409).json({ message: "Signed download links are not enabled" });
+      }
+      const signed = createSignedDownloadToken(doc.id, Number(req.body?.ttlSeconds || 300));
+      res.json({ url: `/api/documents/${doc.id}/download?token=${encodeURIComponent(signed.token)}`, expiresAt: signed.expiresAt });
     } catch (e) { handleError(res, e); }
   });
 
   app.delete("/documents/:id", async (req, res) => {
     try {
+      await requireDocumentAccess(req);
       const doc = await storage.getDocument(req.params.id);
       if (!doc) return res.status(404).json({ message: "Document not found" });
-      const filePath = getStoredUploadPath(doc.fileName);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      await deletePrivateUpload(doc.fileName);
       await storage.deleteDocument(req.params.id);
-      await auditDocumentAction("Document Delete Audited", `Document ${doc.id} deleted`);
+      await auditDocumentAction("client_document.deleted", doc.id, doc.clientId, req.session?.userId);
       res.json({ success: true });
     } catch (e) { handleError(res, e); }
   });

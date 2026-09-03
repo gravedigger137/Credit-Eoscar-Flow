@@ -2,6 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { BlobServiceClient, type BlockBlobClient } from "@azure/storage-blob";
+import { DefaultAzureCredential } from "@azure/identity";
 
 export type PrivateUploadProvider = "local" | "azure_blob";
 
@@ -22,8 +23,14 @@ function safeLocalPath(objectName: string) {
 
 function blobClient(objectName: string): BlockBlobClient {
   const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-  if (!connectionString) throw new Error("AZURE_STORAGE_CONNECTION_STRING is required for Azure private uploads");
-  return BlobServiceClient.fromConnectionString(connectionString)
+  const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+  const service = connectionString
+    ? BlobServiceClient.fromConnectionString(connectionString)
+    : accountName
+      ? new BlobServiceClient(`https://${accountName}.blob.core.windows.net`, new DefaultAzureCredential())
+      : null;
+  if (!service) throw new Error("AZURE_STORAGE_ACCOUNT_NAME or AZURE_STORAGE_CONNECTION_STRING is required for Azure private uploads");
+  return service
     .getContainerClient(azureContainerName)
     .getBlockBlobClient(objectName);
 }
@@ -36,7 +43,7 @@ export function privateUploadStatus() {
   const selected = provider();
   return {
     provider: selected,
-    configured: selected === "local" || !!process.env.AZURE_STORAGE_CONNECTION_STRING,
+    configured: selected === "local" || !!process.env.AZURE_STORAGE_ACCOUNT_NAME || !!process.env.AZURE_STORAGE_CONNECTION_STRING,
     container: selected === "azure_blob" ? azureContainerName : null,
   };
 }

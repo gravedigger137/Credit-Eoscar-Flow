@@ -23,6 +23,7 @@ import Partners from "@/pages/partners";
 import Metro2 from "@/pages/metro2";
 import AIPage from "@/pages/ai";
 import AIEmployeesPage from "@/pages/ai-employees";
+import StaffAccessPage from "@/pages/staff-access";
 import Bureau from "@/pages/bureau";
 import Analytics from "@/pages/analytics";
 import Calculators from "@/pages/calculators";
@@ -48,6 +49,20 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!user) return <Redirect to="/login" />;
+  if (!["admin", "administrator", "owner"].includes((user.role || "").toLowerCase())) return <Redirect to="/dashboard" />;
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -64,6 +79,7 @@ function Router() {
       <Route path="/metro2">{() => <ProtectedRoute component={Metro2} />}</Route>
       <Route path="/ai">{() => <ProtectedRoute component={AIPage} />}</Route>
       <Route path="/ai-employees">{() => <ProtectedRoute component={AIEmployeesPage} />}</Route>
+      <Route path="/staff-access">{() => <AdminRoute component={StaffAccessPage} />}</Route>
       <Route path="/bureau">{() => <ProtectedRoute component={Bureau} />}</Route>
       <Route path="/analytics">{() => <ProtectedRoute component={Analytics} />}</Route>
       <Route path="/calculators">{() => <ProtectedRoute component={Calculators} />}</Route>

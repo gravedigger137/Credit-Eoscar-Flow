@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "AI Employees", href: "/ai-employees", icon: Bot },
+  { name: "Staff Access", href: "/staff-access", icon: UserCheck, adminOnly: true },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "Disputes (e-OSCAR)", href: "/disputes", icon: FileText },
   { name: "Credit Reports", href: "/reports", icon: Activity },
@@ -37,8 +38,10 @@ const navigation = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user } = useAuth();
   const { data } = useQuery<{ count: number }>({ queryKey: ["/api/notifications/unread-count"], refetchInterval: 30000 });
   const unreadCount = data?.count ?? 0;
+  const isAdmin = ["admin", "administrator", "owner"].includes((user?.role || "").toLowerCase());
 
   return (
     <Sidebar className="border-r border-border/50 bg-sidebar">
@@ -53,7 +56,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className="py-4">
         <SidebarMenu>
-          {navigation.map((item) => {
+          {navigation.filter((item) => !(item as any).adminOnly || isAdmin).map((item) => {
             const isInbox = item.name === "Inbox";
             return (
               <SidebarMenuItem key={item.name}>

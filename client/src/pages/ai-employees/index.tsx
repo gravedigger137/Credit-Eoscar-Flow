@@ -4,9 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Bot, Code2, DollarSign, Headphones, Loader2, Play, RefreshCw } from "lucide-react";
+import { Bot, Check, Code2, DollarSign, Headphones, Loader2, Play, RefreshCw, X } from "lucide-react";
 
 const AI_API_BASE = (import.meta.env.VITE_AI_EMPLOYEES_API_URL || "http://127.0.0.1:8100").replace(/\/$/, "");
+const APPROVAL_PERMISSION = "workers.create.approved";
 
 type Worker = {
   id: string;
@@ -49,12 +50,15 @@ async function readJson(res: Response) {
 
 export default function AIEmployeesPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [proposals, setProposals] = useState<Worker[]>([]);
   const [selectedWorker, setSelectedWorker] = useState<string>("arcadia-dev");
   const [task, setTask] = useState("");
   const [result, setResult] = useState<TaskResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingWorkers, setLoadingWorkers] = useState(true);
+  const [loadingApprovals, setLoadingApprovals] = useState(true);
   const [running, setRunning] = useState(false);
+  const [decisionWorker, setDecisionWorker] = useState<string | null>(null);
 
   const selected = useMemo(
     () => workers.find((worker) => worker.id === selectedWorker) || workers[0],
@@ -80,9 +84,63 @@ export default function AIEmployeesPage() {
     }
   }
 
+  async function loadApprovals() {
+    setLoadingApprovals(true);
+    try {
+      const res = await fetch(`${AI_API_BASE}/workers/proposals`);
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Unable to load approvals");
+      setProposals(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load approvals");
+    } finally {
+      setLoadingApprovals(false);
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all([loadWorkers(), loadApprovals()]);
+  }
+
   useEffect(() => {
-    void loadWorkers();
+    void refreshAll();
   }, []);
+
+  async function decideProposal(worker: Worker, approve: boolean) {
+    setDecisionWorker(worker.id);
+    setError(null);
+    try {
+      const endpoint = approve ? "/workers/activate" : "/workers/proposals/reject";
+      const body = approve
+        ? {
+            worker_id: worker.id,
+            name: worker.name,
+            department: worker.department,
+            approved: true,
+            administrator: "dashboard-admin",
+            permissions: [APPROVAL_PERMISSION],
+          }
+        : {
+            worker_id: worker.id,
+            approved: true,
+            administrator: "dashboard-admin",
+            permissions: [APPROVAL_PERMISSION],
+          };
+
+      const res = await fetch(`${AI_API_BASE}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Approval action failed");
+      await refreshAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Approval action failed");
+    } finally {
+      setDecisionWorker(null);
+    }
+  }
 
   async function runTask() {
     if (!selected || !task.trim()) return;
@@ -114,11 +172,11 @@ export default function AIEmployeesPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">AI Employees</h1>
-            <p className="text-muted-foreground mt-1">Choose an employee, assign a task, and review the result.</p>
+            <p className="text-muted-foreground mt-1">Choose an employee, assign work, and approve new staff from one place.</p>
           </div>
-          <Button variant="outline" onClick={() => void loadWorkers()} disabled={loadingWorkers}>
-            {loadingWorkers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Refresh Workers
+          <Button variant="outline" onClick={() => void refreshAll()} disabled={loadingWorkers || loadingApprovals}>
+            {loadingWorkers || loadingApprovals ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Refresh
           </Button>
         </div>
 
@@ -130,6 +188,55 @@ export default function AIEmployeesPage() {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle>Staff Approvals</CardTitle>
+                <CardDescription>New staff stay pending until you approve them here.</CardDescription>
+              </div>
+              <Badge variant={proposals.length ? "default" : "secondary"}>{proposals.length} Pending</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingApprovals ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading approvals...</div>
+            ) : proposals.length === 0 ? (
+              <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No staff approvals are waiting right now.</div>
+            ) : (
+              <div className="space-y-3">
+                {proposals.map((proposal) => (
+                  <div key={proposal.id} className="flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">{proposal.name}</p>
+                        <Badge variant="outline">Pending Approval</Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{proposal.department}</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {proposal.permissions.slice(0, 5).map((permission) => (
+                          <Badge key={permission} variant="secondary" className="text-[10px]">{permission}</Badge>
+                        ))}
+                        {proposal.permissions.length > 5 && <Badge variant="secondary" className="text-[10px]">+{proposal.permissions.length - 5}</Badge>}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => void decideProposal(proposal, false)} disabled={decisionWorker === proposal.id}>
+                        {decisionWorker === proposal.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <X className="mr-2 h-4 w-4" />}
+                        Reject
+                      </Button>
+                      <Button onClick={() => void decideProposal(proposal, true)} disabled={decisionWorker === proposal.id}>
+                        {decisionWorker === proposal.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                        Approve
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 md:grid-cols-3">
           {workers.map((worker) => {

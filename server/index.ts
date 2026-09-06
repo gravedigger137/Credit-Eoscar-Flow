@@ -12,6 +12,7 @@ import { requireAuth } from "./auth";
 import { requireAdmin } from "./authorization";
 import { authRouter } from "./routes/auth.routes";
 import { aiRouter } from "./routes/ai.routes";
+import { aiEmployeesRouter } from "./routes/ai-employees.routes";
 import { creditRouter } from "./routes/credit.routes";
 import { setupOAuth, registerOAuthRoutes } from "./oauth";
 import { pool } from "./db";
@@ -459,6 +460,7 @@ app.use((req, res, next) => {
   const v1Router = Router();
   v1Router.use("/credit", creditRouter);
   v1Router.use("/ai", aiRouter);
+  v1Router.use("/ai-employees", requireAdmin, aiEmployeesRouter);
 
   await registerRoutes(httpServer, v1Router);
   startInstitutionalExchangeWorker();

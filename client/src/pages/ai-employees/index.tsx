@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Shell } from "@/components/layout/Shell";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Bot, Check, Code2, DollarSign, Headphones, Loader2, Play, RefreshCw, X } from "lucide-react";
 
-const AI_API_BASE = (import.meta.env.VITE_AI_EMPLOYEES_API_URL || "https://ai.infinitearcadia.com").replace(/\/$/, "");
-const APPROVAL_PERMISSION = "workers.create.approved";
+const AI_API_BASE = "/api/v1/ai-employees";
 
 type Worker = {
   id: string;
@@ -15,6 +15,21 @@ type Worker = {
   department: string;
   permissions: string[];
   active: boolean;
+};
+
+type Approval = {
+  request_id: string;
+  requesting_worker: string;
+  worker_role: string;
+  requested_action: string;
+  target_system: string;
+  proposed_parameters: Record<string, unknown>;
+  summary: string;
+  risk_level: string;
+  timestamp: string;
+  expires_at: string;
+  status: "pending" | "approved" | "rejected" | "executed" | "failed" | "expired";
+  approver_identity?: string | null;
 };
 
 type TaskResult = {
@@ -51,14 +66,17 @@ async function readJson(res: Response) {
 export default function AIEmployeesPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [proposals, setProposals] = useState<Worker[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const [selectedWorker, setSelectedWorker] = useState<string>("arcadia-dev");
   const [task, setTask] = useState("");
   const [result, setResult] = useState<TaskResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingWorkers, setLoadingWorkers] = useState(true);
   const [loadingApprovals, setLoadingApprovals] = useState(true);
+  const [loadingActions, setLoadingActions] = useState(true);
   const [running, setRunning] = useState(false);
   const [decisionWorker, setDecisionWorker] = useState<string | null>(null);
+  const [decisionApproval, setDecisionApproval] = useState<string | null>(null);
 
   const selected = useMemo(
     () => workers.find((worker) => worker.id === selectedWorker) || workers[0],
@@ -98,8 +116,22 @@ export default function AIEmployeesPage() {
     }
   }
 
+  async function loadActionApprovals() {
+    setLoadingActions(true);
+    try {
+      const res = await fetch(`${AI_API_BASE}/approvals`, { credentials: "include" });
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || data?.message || "Unable to load action approvals");
+      setApprovals(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load action approvals");
+    } finally {
+      setLoadingActions(false);
+    }
+  }
+
   async function refreshAll() {
-    await Promise.all([loadWorkers(), loadApprovals()]);
+    await Promise.all([loadWorkers(), loadApprovals(), loadActionApprovals()]);
   }
 
   useEffect(() => {
@@ -112,33 +144,55 @@ export default function AIEmployeesPage() {
     try {
       const endpoint = approve ? "/workers/activate" : "/workers/proposals/reject";
       const body = approve
-        ? {
-            worker_id: worker.id,
-            name: worker.name,
-            department: worker.department,
-            approved: true,
-            administrator: "dashboard-admin",
-            permissions: [APPROVAL_PERMISSION],
-          }
-        : {
-            worker_id: worker.id,
-            approved: true,
-            administrator: "dashboard-admin",
-            permissions: [APPROVAL_PERMISSION],
-          };
-
-      const res = await fetch(`${AI_API_BASE}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+        ? { worker_id: worker.id, name: worker.name, department: worker.department }
+        : { worker_id: worker.id };
+      const res = await apiRequest("POST", `${AI_API_BASE}${endpoint}`, body);
       const data = await readJson(res);
-      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Approval action failed");
+      if (res.status !== 202 || !data?.request_id) {
+        throw new Error("The server did not create a pending approval request.");
+      }
       await refreshAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Approval action failed");
+      setError(err instanceof Error ? err.message : "Unable to request worker decision approval");
     } finally {
       setDecisionWorker(null);
+    }
+  }
+
+  async function decideAction(approval: Approval, approve: boolean) {
+    setDecisionApproval(approval.request_id);
+    setError(null);
+    try {
+      await apiRequest(
+        "POST",
+        `${AI_API_BASE}/approvals/${approval.request_id}/${approve ? "approve" : "reject"}`,
+      );
+      if (approve && approval.requested_action === "worker.activate") {
+        await apiRequest("POST", `${AI_API_BASE}/workers/activate`, {
+          ...approval.proposed_parameters,
+          approval_id: approval.request_id,
+        });
+      } else if (approve && approval.requested_action === "worker.reject") {
+        await apiRequest("POST", `${AI_API_BASE}/workers/proposals/reject`, {
+          ...approval.proposed_parameters,
+          approval_id: approval.request_id,
+        });
+      } else if (approve && approval.requested_action === "worker.deactivate") {
+        await apiRequest("POST", `${AI_API_BASE}/workers/deactivate`, {
+          ...approval.proposed_parameters,
+          approval_id: approval.request_id,
+        });
+      } else if (approve && approval.requested_action === "worker.permissions.set") {
+        await apiRequest("POST", `${AI_API_BASE}/workers/permissions`, {
+          ...approval.proposed_parameters,
+          approval_id: approval.request_id,
+        });
+      }
+      await refreshAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Approval decision failed");
+    } finally {
+      setDecisionApproval(null);
     }
   }
 
@@ -151,11 +205,7 @@ export default function AIEmployeesPage() {
     const endpoint = workerEndpoints[selected.id] || "/task";
 
     try {
-      const res = await fetch(`${AI_API_BASE}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: task.trim() }),
-      });
+      const res = await apiRequest("POST", `${AI_API_BASE}${endpoint}`, { task: task.trim() });
       const data = await readJson(res);
       if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Task failed");
       setResult(data || {});
@@ -174,8 +224,8 @@ export default function AIEmployeesPage() {
             <h1 className="text-3xl font-bold tracking-tight">AI Employees</h1>
             <p className="text-muted-foreground mt-1">Choose an employee, assign work, and approve new staff from one place.</p>
           </div>
-          <Button variant="outline" onClick={() => void refreshAll()} disabled={loadingWorkers || loadingApprovals}>
-            {loadingWorkers || loadingApprovals ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+          <Button variant="outline" onClick={() => void refreshAll()} disabled={loadingWorkers || loadingApprovals || loadingActions}>
+            {loadingWorkers || loadingApprovals || loadingActions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Refresh
           </Button>
         </div>
@@ -188,6 +238,54 @@ export default function AIEmployeesPage() {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle>Pending Action Approvals</CardTitle>
+                <CardDescription>One-time, server-verified approvals for exact consequential changes.</CardDescription>
+              </div>
+              <Badge variant={approvals.some((item) => item.status === "pending") ? "default" : "secondary"}>
+                {approvals.filter((item) => item.status === "pending").length} Pending
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingActions ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading action approvals...</div>
+            ) : approvals.filter((item) => item.status === "pending").length === 0 ? (
+              <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No consequential actions are waiting for your approval.</div>
+            ) : (
+              <div className="space-y-3">
+                {approvals.filter((item) => item.status === "pending").map((approval) => (
+                  <div key={approval.request_id} className="rounded-lg border p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold">{approval.requesting_worker}</p>
+                          <Badge variant="outline">{approval.requested_action}</Badge>
+                          <Badge variant={approval.risk_level === "high" ? "destructive" : "secondary"}>{approval.risk_level}</Badge>
+                        </div>
+                        <p className="text-sm">{approval.summary}</p>
+                        <p className="text-xs text-muted-foreground">Target: {approval.target_system} · Role: {approval.worker_role} · {new Date(approval.timestamp).toLocaleString()}</p>
+                        <pre className="max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{JSON.stringify(approval.proposed_parameters, null, 2)}</pre>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button variant="outline" onClick={() => void decideAction(approval, false)} disabled={decisionApproval === approval.request_id}>
+                          <X className="mr-2 h-4 w-4" />Reject
+                        </Button>
+                        <Button onClick={() => void decideAction(approval, true)} disabled={decisionApproval === approval.request_id}>
+                          {decisionApproval === approval.request_id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}Approve
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

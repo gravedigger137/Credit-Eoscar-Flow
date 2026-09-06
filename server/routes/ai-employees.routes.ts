@@ -3,7 +3,7 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 export const aiEmployeesRouter = Router();
 
 const allowedRoutes = [
-  /^\/(workers|workers\/activate|workers\/proposals|workers\/proposals\/reject|permissions|connectors|audit|approvals)$/,
+  /^\/(workers|workers\/activate|workers\/deactivate|workers\/permissions|workers\/proposals|workers\/proposals\/reject|permissions|connectors|audit|approvals)$/,
   /^\/approvals\/[A-Za-z0-9-]+\/(approve|reject)$/,
   /^\/agents\/(dev|finance|ops)$/,
   /^\/agents\/finance\/erpnext$/,

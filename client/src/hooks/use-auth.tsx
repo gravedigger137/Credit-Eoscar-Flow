@@ -60,7 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registerMutation = useMutation({
     mutationFn: async (data: { username: string; password: string; fullName?: string; email?: string }) => {
       const res = await apiRequest("POST", "/api/auth/register", data);
-      return res.json();
+      const userData = await res.json();
+      if (userData?.pendingApproval) {
+        qc.setQueryData(["/api/auth/me"], null);
+        throw new Error(userData.message || "Account created and pending administrator approval.");
+      }
+      return userData;
     },
     onSuccess: (userData) => {
       qc.setQueryData(["/api/auth/me"], userData);

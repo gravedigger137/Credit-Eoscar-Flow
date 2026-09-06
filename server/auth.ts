@@ -4,9 +4,17 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { getBootstrapAdminEmails, getBootstrapRole, isAdminUser, sanitizeUser } from "./authorization";
+import { getBootstrapAdminEmails, getBootstrapRole, isAdminUser, requireAdmin, sanitizeUser } from "./authorization";
 import { createOtpAuthUrl, createRecoveryCodes, createTotpSecret, consumeRecoveryCode, verifyTotp } from "./mfa-service";
 import { rateLimit } from "./rate-limit";
+import {
+  canUserLogin,
+  ensureUserAccess,
+  getUserAccess,
+  listUsersWithAccess,
+  markUserLogin,
+  setUserAccess,
+} from "./user-access";
 
 declare module "express-session" {
   interface SessionData {
@@ -40,9 +48,6 @@ authRouter.post("/auth/register", async (req: Request, res: Response) => {
     const allUsers = await storage.getUsers();
     const isFirstUser = allUsers.length === 0;
 
-    if (!isFirstUser) {
-    }
-
     const existing = await storage.getUserByUsername(username);
     if (existing) {
       return res.status(409).json({ message: "Username already taken" });
@@ -53,8 +58,9 @@ authRouter.post("/auth/register", async (req: Request, res: Response) => {
     const fallbackRole = isFirstUser && bootstrapEmails.size === 0 ? "admin" : "client";
     const role = getBootstrapRole(email, fallbackRole);
     const user = await storage.createUser({ username, password: hashed, fullName, email, phone, role });
+    const access = await ensureUserAccess(user);
 
-    if (isFirstUser) {
+    if (isAdminUser(user)) {
       const csrfSecret = req.session.csrfSecret;
       req.session.regenerate((err) => {
         if (err) return res.status(500).json({ message: "Session error" });
@@ -62,12 +68,23 @@ authRouter.post("/auth/register", async (req: Request, res: Response) => {
         req.session.userId = user.id;
         req.session.mfaVerified = !user.mfaEnabled;
         req.session.save(() => {
-          res.status(201).json(sanitizeUser(user));
+          res.status(201).json({
+            ...sanitizeUser(user),
+            approvalStatus: "approved",
+            isActive: true,
+          });
         });
       });
-    } else {
-      res.status(201).json(sanitizeUser(user));
+      return;
     }
+
+    res.status(201).json({
+      ...sanitizeUser(user),
+      approvalStatus: access.status,
+      isActive: access.isActive,
+      pendingApproval: true,
+      message: "Account created and pending administrator approval.",
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Registration failed" });
@@ -89,13 +106,33 @@ authRouter.post("/auth/login", async (req: Request, res: Response) => {
     if (!match) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
+
+    if (!isAdminUser(user) && !(await canUserLogin(user))) {
+      const access = await getUserAccess(user.id);
+      if (access?.status === "rejected") {
+        return res.status(403).json({
+          message: "Account access has been rejected. Contact an administrator.",
+          code: "ACCOUNT_REJECTED",
+        });
+      }
+      return res.status(403).json({
+        message: "Account pending administrator approval.",
+        code: "ACCOUNT_PENDING_APPROVAL",
+      });
+    }
+
     const csrfSecret = req.session.csrfSecret;
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ message: "Session error" });
       if (csrfSecret) req.session.csrfSecret = csrfSecret;
       req.session.userId = user.id;
       req.session.mfaVerified = !user.mfaEnabled;
-      req.session.save(() => {
+      req.session.save(async () => {
+        try {
+          await markUserLogin(user.id);
+        } catch (markError) {
+          console.error("Unable to record login timestamp", markError);
+        }
         res.json({ ...sanitizeUser(user), mfaRequired: user.mfaEnabled && isAdminUser(user) });
       });
     });
@@ -184,6 +221,10 @@ authRouter.get("/auth/me", async (req: Request, res: Response) => {
   try {
     const user = await storage.getUser(req.session.userId);
     if (!user) return res.status(401).json({ message: "Not authenticated" });
+    if (!isAdminUser(user) && !(await canUserLogin(user))) {
+      req.session.destroy(() => undefined);
+      return res.status(403).json({ message: "Account is not approved for access", code: "ACCOUNT_NOT_APPROVED" });
+    }
     res.json(sanitizeUser(user));
   } catch {
     res.status(401).json({ message: "Not authenticated" });
@@ -196,6 +237,47 @@ authRouter.get("/auth/has-users", async (_req: Request, res: Response) => {
     res.json({ hasUsers: allUsers.length > 0 });
   } catch {
     res.json({ hasUsers: false });
+  }
+});
+
+authRouter.get("/auth/admin/users", requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const allUsers = await storage.getUsers();
+    res.json(await listUsersWithAccess(allUsers));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Unable to load staff accounts" });
+  }
+});
+
+authRouter.post("/auth/admin/users/:id/approve", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const administratorId = req.session.userId;
+    if (!administratorId) return res.status(401).json({ message: "Authentication required" });
+    const user = await storage.getUser(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    await setUserAccess(user.id, "approved", administratorId);
+    const access = await getUserAccess(user.id);
+    res.json({ ...sanitizeUser(user), approvalStatus: access?.status, isActive: access?.isActive });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Unable to approve account" });
+  }
+});
+
+authRouter.post("/auth/admin/users/:id/reject", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const administratorId = req.session.userId;
+    if (!administratorId) return res.status(401).json({ message: "Authentication required" });
+    const user = await storage.getUser(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (isAdminUser(user)) return res.status(400).json({ message: "Administrator accounts cannot be rejected here" });
+    await setUserAccess(user.id, "rejected", administratorId);
+    const access = await getUserAccess(user.id);
+    res.json({ ...sanitizeUser(user), approvalStatus: access?.status, isActive: access?.isActive });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Unable to reject account" });
   }
 });
 

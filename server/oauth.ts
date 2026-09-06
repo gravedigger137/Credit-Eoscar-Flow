@@ -5,7 +5,8 @@ import { Strategy as GitHubStrategy } from "passport-github2";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import { getPublicAppUrl } from "./config";
-import { getBootstrapAdminEmails, getBootstrapRole } from "./authorization";
+import { getBootstrapAdminEmails, getBootstrapRole, isAdminUser } from "./authorization";
+import { canUserLogin, ensureUserAccess, markUserLogin } from "./user-access";
 
 passport.serializeUser((user: any, done) => {
   done(null, user.id);
@@ -36,6 +37,7 @@ async function findOrCreateOAuthUser(profile: {
   );
 
   if (existing) {
+    await ensureUserAccess(existing);
     return existing;
   }
 
@@ -55,6 +57,7 @@ async function findOrCreateOAuthUser(profile: {
     oauthProviderId: profile.providerId,
   });
 
+  await ensureUserAccess(user);
   return user;
 }
 
@@ -136,6 +139,25 @@ export function setupOAuth() {
   }
 }
 
+async function completeOAuthLogin(req: any, res: any) {
+  const user = req.user;
+  if (!user) return res.redirect("/login?error=oauth_failed");
+
+  if (!isAdminUser(user) && !(await canUserLogin(user))) {
+    req.logout?.(() => undefined);
+    req.session?.destroy?.(() => undefined);
+    return res.redirect("/login?error=pending_approval");
+  }
+
+  req.session.userId = user.id;
+  try {
+    await markUserLogin(user.id);
+  } catch (err) {
+    console.error("Unable to record OAuth login timestamp", err);
+  }
+  req.session.save(() => res.redirect("/dashboard"));
+}
+
 export function registerOAuthRoutes(app: any) {
   app.use(passport.initialize());
   app.use(passport.session());
@@ -145,10 +167,7 @@ export function registerOAuthRoutes(app: any) {
     app.get(
       "/api/v1/auth/google/callback",
       passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
-      (req: any, res: any) => {
-        req.session.userId = req.user.id;
-        req.session.save(() => res.redirect("/dashboard"));
-      }
+      (req: any, res: any) => { void completeOAuthLogin(req, res); }
     );
   }
 
@@ -157,10 +176,7 @@ export function registerOAuthRoutes(app: any) {
     app.get(
       "/api/v1/auth/facebook/callback",
       passport.authenticate("facebook", { failureRedirect: "/login?error=facebook_failed" }),
-      (req: any, res: any) => {
-        req.session.userId = req.user.id;
-        req.session.save(() => res.redirect("/dashboard"));
-      }
+      (req: any, res: any) => { void completeOAuthLogin(req, res); }
     );
   }
 
@@ -169,10 +185,7 @@ export function registerOAuthRoutes(app: any) {
     app.get(
       "/api/v1/auth/github/callback",
       passport.authenticate("github", { failureRedirect: "/login?error=github_failed" }),
-      (req: any, res: any) => {
-        req.session.userId = req.user.id;
-        req.session.save(() => res.redirect("/dashboard"));
-      }
+      (req: any, res: any) => { void completeOAuthLogin(req, res); }
     );
   }
 

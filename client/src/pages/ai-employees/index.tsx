@@ -177,6 +177,16 @@ export default function AIEmployeesPage() {
           ...approval.proposed_parameters,
           approval_id: approval.request_id,
         });
+      } else if (approve && approval.requested_action === "worker.deactivate") {
+        await apiRequest("POST", `${AI_API_BASE}/workers/deactivate`, {
+          ...approval.proposed_parameters,
+          approval_id: approval.request_id,
+        });
+      } else if (approve && approval.requested_action === "worker.permissions.set") {
+        await apiRequest("POST", `${AI_API_BASE}/workers/permissions`, {
+          ...approval.proposed_parameters,
+          approval_id: approval.request_id,
+        });
       }
       await refreshAll();
     } catch (err) {

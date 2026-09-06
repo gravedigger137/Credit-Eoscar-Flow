@@ -195,11 +195,7 @@ export default function AIEmployeesPage() {
     const endpoint = workerEndpoints[selected.id] || "/task";
 
     try {
-      const res = await fetch(`${AI_API_BASE}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: task.trim() }),
-      });
+      const res = await apiRequest("POST", `${AI_API_BASE}${endpoint}`, { task: task.trim() });
       const data = await readJson(res);
       if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Task failed");
       setResult(data || {});

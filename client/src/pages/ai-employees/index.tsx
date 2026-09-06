@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Bot, Check, Code2, DollarSign, Headphones, Loader2, Play, RefreshCw, X } from "lucide-react";
 
-const AI_API_BASE = (import.meta.env.VITE_AI_EMPLOYEES_API_URL || "http://127.0.0.1:8100").replace(/\/$/, "");
+const AI_API_BASE = (import.meta.env.VITE_AI_EMPLOYEES_API_URL || "https://ai.infinitearcadia.com").replace(/\/$/, "");
 const APPROVAL_PERMISSION = "workers.create.approved";
 
 type Worker = {

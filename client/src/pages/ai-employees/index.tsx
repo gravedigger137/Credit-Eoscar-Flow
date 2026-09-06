@@ -31,6 +31,12 @@ const workerMeta: Record<string, { icon: typeof Bot; description: string }> = {
   "arcadia-ops": { icon: Headphones, description: "Operations, CRM, customer service, scheduling, and communications." },
 };
 
+const workerEndpoints: Record<string, string> = {
+  "arcadia-dev": "/agents/dev",
+  "arcadia-finance": "/agents/finance",
+  "arcadia-ops": "/agents/ops",
+};
+
 async function readJson(res: Response) {
   const text = await res.text();
   if (!text) return null;
@@ -84,13 +90,13 @@ export default function AIEmployeesPage() {
     setResult(null);
     setError(null);
 
-    const routedTask = `${selected.name}: ${task.trim()}`;
+    const endpoint = workerEndpoints[selected.id] || "/task";
 
     try {
-      const res = await fetch(`${AI_API_BASE}/task`, {
+      const res = await fetch(`${AI_API_BASE}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: routedTask }),
+        body: JSON.stringify({ task: task.trim() }),
       });
       const data = await readJson(res);
       if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Task failed");
@@ -165,7 +171,7 @@ export default function AIEmployeesPage() {
           <Card>
             <CardHeader>
               <CardTitle>Assign Task</CardTitle>
-              <CardDescription>{selected ? `Sending to ${selected.name}` : "Select an employee first"}</CardDescription>
+              <CardDescription>{selected ? `Sending directly to ${selected.name}` : "Select an employee first"}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Textarea
@@ -184,7 +190,7 @@ export default function AIEmployeesPage() {
           <Card>
             <CardHeader>
               <CardTitle>Task Result</CardTitle>
-              <CardDescription>Live response from the AI Employees backend.</CardDescription>
+              <CardDescription>Live response from the selected AI employee.</CardDescription>
             </CardHeader>
             <CardContent>
               {result ? (

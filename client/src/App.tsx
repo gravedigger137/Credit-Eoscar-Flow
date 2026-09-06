@@ -22,6 +22,7 @@ import Uploads from "@/pages/uploads";
 import Partners from "@/pages/partners";
 import Metro2 from "@/pages/metro2";
 import AIPage from "@/pages/ai";
+import AIEmployeesPage from "@/pages/ai-employees";
 import Bureau from "@/pages/bureau";
 import Analytics from "@/pages/analytics";
 import Calculators from "@/pages/calculators";
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/partners">{() => <ProtectedRoute component={Partners} />}</Route>
       <Route path="/metro2">{() => <ProtectedRoute component={Metro2} />}</Route>
       <Route path="/ai">{() => <ProtectedRoute component={AIPage} />}</Route>
+      <Route path="/ai-employees">{() => <ProtectedRoute component={AIEmployeesPage} />}</Route>
       <Route path="/bureau">{() => <ProtectedRoute component={Bureau} />}</Route>
       <Route path="/analytics">{() => <ProtectedRoute component={Analytics} />}</Route>
       <Route path="/calculators">{() => <ProtectedRoute component={Calculators} />}</Route>

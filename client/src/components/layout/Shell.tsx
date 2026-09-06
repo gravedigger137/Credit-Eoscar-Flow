@@ -1,6 +1,6 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database, Sparkles, LogOut, Building2, BarChart3, Calculator, Landmark, Zap, Wrench, Coins, Archive } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, ShieldCheck, Activity, CreditCard, Wallet, Bell, DollarSign, Upload, UserCheck, Database, Sparkles, LogOut, Building2, BarChart3, Calculator, Landmark, Zap, Wrench, Coins, Archive, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "AI Employees", href: "/ai-employees", icon: Bot },
   { name: "Clients", href: "/clients", icon: Users },
   { name: "Disputes (e-OSCAR)", href: "/disputes", icon: FileText },
   { name: "Credit Reports", href: "/reports", icon: Activity },

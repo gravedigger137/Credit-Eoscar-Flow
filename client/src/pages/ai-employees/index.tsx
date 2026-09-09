@@ -89,7 +89,7 @@ export default function AIEmployeesPage() {
     try {
       const res = await fetch(`${AI_API_BASE}/workers`, { credentials: "include" });
       const data = await readJson(res);
-      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Unable to load workers");
+      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || data?.message || "Unable to load workers");
       const nextWorkers = Array.isArray(data) ? data : data?.value || [];
       setWorkers(nextWorkers);
       if (nextWorkers.length && !nextWorkers.some((worker: Worker) => worker.id === selectedWorker)) {
@@ -107,7 +107,7 @@ export default function AIEmployeesPage() {
     try {
       const res = await fetch(`${AI_API_BASE}/workers/proposals`, { credentials: "include" });
       const data = await readJson(res);
-      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Unable to load approvals");
+      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || data?.message || "Unable to load approvals");
       setProposals(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load approvals");
@@ -207,7 +207,7 @@ export default function AIEmployeesPage() {
     try {
       const res = await apiRequest("POST", `${AI_API_BASE}${endpoint}`, { task: task.trim() });
       const data = await readJson(res);
-      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Task failed");
+      if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || data?.message || "Task failed");
       setResult(data || {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Task failed");

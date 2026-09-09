@@ -87,7 +87,7 @@ export default function AIEmployeesPage() {
     setLoadingWorkers(true);
     setError(null);
     try {
-      const res = await fetch(`${AI_API_BASE}/workers`);
+      const res = await fetch(`${AI_API_BASE}/workers`, { credentials: "include" });
       const data = await readJson(res);
       if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Unable to load workers");
       const nextWorkers = Array.isArray(data) ? data : data?.value || [];
@@ -105,7 +105,7 @@ export default function AIEmployeesPage() {
   async function loadApprovals() {
     setLoadingApprovals(true);
     try {
-      const res = await fetch(`${AI_API_BASE}/workers/proposals`);
+      const res = await fetch(`${AI_API_BASE}/workers/proposals`, { credentials: "include" });
       const data = await readJson(res);
       if (!res.ok) throw new Error(typeof data === "string" ? data : data?.detail || "Unable to load approvals");
       setProposals(Array.isArray(data) ? data : []);

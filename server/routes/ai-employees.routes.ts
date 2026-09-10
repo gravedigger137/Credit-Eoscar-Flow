@@ -52,7 +52,7 @@ aiEmployeesRouter.use(async (req: Request, res: Response, next: NextFunction) =>
       Accept: "application/json",
       "X-IA-Owner-Token": ownerToken,
     };
-    const init: RequestInit = { method: req.method, headers, signal: AbortSignal.timeout(30_000) };
+    const init: RequestInit = { method: req.method, headers, signal: AbortSignal.timeout(120_000) };
     if (req.method !== "GET") {
       headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(req.body || {});

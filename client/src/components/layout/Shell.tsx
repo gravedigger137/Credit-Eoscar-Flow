@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { CookiePreferencesLink } from "@/components/CookiePreferencesLink";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -149,6 +150,9 @@ export function Shell({ children, title, subtitle }: { children: React.ReactNode
           <div className="flex-1 overflow-auto p-6 md:p-8 animate-in fade-in duration-300">
             {children}
           </div>
+          <footer className="flex justify-end border-t border-border/40 px-6 py-3 text-xs text-muted-foreground">
+            <CookiePreferencesLink className="hover:text-foreground transition-colors underline-offset-4 hover:underline" />
+          </footer>
         </main>
       </div>
     </SidebarProvider>

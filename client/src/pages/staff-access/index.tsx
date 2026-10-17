@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Check, Loader2, RefreshCw, UserCheck, UserX } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { apiRequest } from "@/lib/queryClient";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
@@ -68,11 +69,7 @@ export default function StaffAccessPage() {
     setActionId(person.id);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/admin/users/${person.id}/${decision}`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await apiRequest("POST", `${API_BASE}/api/auth/admin/users/${person.id}/${decision}`);
       const data = await readJson(res);
       if (!res.ok) throw new Error(typeof data === "string" ? data : data?.message || `Unable to ${decision} account`);
       await loadStaff();

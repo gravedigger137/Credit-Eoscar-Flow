@@ -513,7 +513,13 @@ export const auditEvents = pgTable("audit_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertDocumentRoomItemSchema = createInsertSchema(documentRoomItems).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertDocumentRoomItemSchema = createInsertSchema(documentRoomItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  sourceFileName: true,
+  storageUrlOrPath: true,
+});
 export type InsertDocumentRoomItem = z.infer<typeof insertDocumentRoomItemSchema>;
 export type DocumentRoomItem = typeof documentRoomItems.$inferSelect;
 

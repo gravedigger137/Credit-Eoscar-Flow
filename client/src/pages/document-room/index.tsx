@@ -16,6 +16,7 @@ import {
   Archive,
   Bot,
   CheckCircle2,
+  Download,
   FileCheck,
   FileText,
   Gauge,
@@ -23,8 +24,10 @@ import {
   Loader2,
   Plus,
   ShieldCheck,
+  Upload,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { csrfFetch } from "@/lib/queryClient";
 
 const statusClass: Record<string, string> = {
   draft: "bg-slate-500/15 text-slate-500 border-slate-500/30",
@@ -73,6 +76,8 @@ export default function DocumentRoomPage() {
     status: "draft",
     confidentialityLevel: "internal",
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const createFileInput = useRef<HTMLInputElement>(null);
 
   const { data: summary, isLoading: summaryLoading } = useQuery<any>({ queryKey: ["/api/document-room/summary"] });
   const { data: items = [], isLoading: itemsLoading } = useQuery<any[]>({ queryKey: ["/api/document-room/items"] });
@@ -83,14 +88,37 @@ export default function DocumentRoomPage() {
   const { data: audits = [] } = useQuery<any[]>({ queryKey: ["/api/document-room/audit-events"] });
   const { data: agents } = useQuery<any>({ queryKey: ["/api/v1/status/agents"] });
 
+  const uploadFile = useMutation({
+    mutationFn: async ({ itemId, file }: { itemId: string; file: File }) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await csrfFetch(`/api/v1/document-room/items/${itemId}/file`, { method: "POST", body: formData });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || "File upload failed");
+      }
+      return response.json();
+    },
+    onSuccess: (_item, variables) => {
+      qc.invalidateQueries({ queryKey: ["/api/document-room/items"] });
+      qc.invalidateQueries({ queryKey: ["/api/document-room/audit-events"] });
+      toast({ title: "Document uploaded", description: `${variables.file.name} is attached to the binder record.` });
+    },
+    onError: (error: Error) => toast({ title: "Upload failed", description: error.message, variant: "destructive" }),
+  });
+
   const createItem = useMutation({
-    mutationFn: (payload: any) => apiRequest("POST", "/api/document-room/items", payload).then((res) => res.json()),
-    onSuccess: () => {
+    mutationFn: ({ payload, file: _file }: { payload: typeof newItem; file: File | null }) =>
+      apiRequest("POST", "/api/document-room/items", payload).then((res) => res.json()),
+    onSuccess: (item, variables) => {
       qc.invalidateQueries({ queryKey: ["/api/document-room/summary"] });
       qc.invalidateQueries({ queryKey: ["/api/document-room/items"] });
       qc.invalidateQueries({ queryKey: ["/api/document-room/audit-events"] });
       setNewItem({ category: "Organizational", title: "", documentType: "policy", description: "", status: "draft", confidentialityLevel: "internal" });
-      toast({ title: "Document room item created" });
+      setSelectedFile(null);
+      if (createFileInput.current) createFileInput.current.value = "";
+      toast({ title: variables.file ? "Binder record created" : "Document room item created" });
+      if (variables.file) uploadFile.mutate({ itemId: item.id, file: variables.file });
     },
     onError: (error: Error) => toast({ title: "Could not create item", description: error.message, variant: "destructive" }),
   });
@@ -174,7 +202,7 @@ export default function DocumentRoomPage() {
               <Card className="glass-panel">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Add Draft Record</CardTitle>
-                  <CardDescription>Create metadata only. Upload evidence through the existing upload flow.</CardDescription>
+                  <CardDescription>Create a binder record and optionally attach its supporting file. Files remain private and require sign-in to download.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -214,8 +242,18 @@ export default function DocumentRoomPage() {
                     <Label>Description</Label>
                     <Textarea value={newItem.description} onChange={(event) => setNewItem((prev) => ({ ...prev, description: event.target.value }))} placeholder="Purpose, owner, review notes, and supporting evidence needed." />
                   </div>
-                  <Button className="w-full" onClick={() => createItem.mutate(newItem)} disabled={!newItem.title || createItem.isPending}>
-                    {createItem.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : "Create Draft Record"}
+                  <div className="space-y-2">
+                    <Label>Supporting document (optional)</Label>
+                    <Input
+                      ref={createFileInput}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.txt,.xml,.csv,.json,.dat,.metro2,.xlsx,.xls"
+                      onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] || null)}
+                    />
+                    <p className="text-xs text-muted-foreground">PDF, images, Word, text, XML, CSV, JSON, and Excel files. The server checks file type and size.</p>
+                  </div>
+                  <Button className="w-full" onClick={() => createItem.mutate({ payload: newItem, file: selectedFile })} disabled={!newItem.title || createItem.isPending || uploadFile.isPending}>
+                    {createItem.isPending || uploadFile.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : selectedFile ? <><Upload className="w-4 h-4" /> Create Record & Upload</> : "Create Draft Record"}
                   </Button>
                 </CardContent>
               </Card>
@@ -226,7 +264,7 @@ export default function DocumentRoomPage() {
             <Card className="glass-panel">
               <CardHeader>
                 <CardTitle>Due Diligence Binder</CardTitle>
-                <CardDescription>Document metadata with attorney/accountant and lender visibility flags</CardDescription>
+                <CardDescription>Attach, replace, and download private supporting files for each binder record.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -236,8 +274,10 @@ export default function DocumentRoomPage() {
                       <TableHead>Category</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Version</TableHead>
+                      <TableHead>File</TableHead>
                       <TableHead>Review</TableHead>
                       <TableHead>Lender Visible</TableHead>
+                      <TableHead>Upload</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -248,14 +288,39 @@ export default function DocumentRoomPage() {
                         <TableCell><StatusBadge status={item.status} /></TableCell>
                         <TableCell>{item.version}</TableCell>
                         <TableCell>
+                          {item.sourceFileName ? (
+                            <a className="inline-flex max-w-56 items-center gap-1 truncate text-primary hover:underline" href={`/api/v1/document-room/items/${item.id}/file`} download={item.sourceFileName} title={item.sourceFileName}>
+                              <Download className="w-4 h-4" /> {item.sourceFileName}
+                            </a>
+                          ) : <span className="text-muted-foreground">No file attached</span>}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {item.attorneyReviewRequired && <Badge variant="outline">Attorney</Badge>}
                             {item.accountantReviewRequired && <Badge variant="outline">Accountant</Badge>}
                           </div>
                         </TableCell>
                         <TableCell>{item.lenderVisible ? <Badge>Lender Visible</Badge> : <span className="text-muted-foreground">No</span>}</TableCell>
+                        <TableCell>
+                          <label className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-input px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                            <Upload className="w-4 h-4" />
+                            {item.sourceFileName ? "Replace" : "Attach"}
+                            <Input
+                              type="file"
+                              className="sr-only"
+                              accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.txt,.xml,.csv,.json,.dat,.metro2,.xlsx,.xls"
+                              disabled={uploadFile.isPending}
+                              onChange={(event) => {
+                                const file = event.currentTarget.files?.[0];
+                                if (file) uploadFile.mutate({ itemId: item.id, file });
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                        </TableCell>
                       </TableRow>
                     ))}
+                    {items.length === 0 && <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">No binder records yet. Add a draft record above and choose a file to upload it.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </CardContent>

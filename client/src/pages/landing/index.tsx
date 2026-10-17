@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { ShieldCheck, TrendingUp, FileText, CreditCard, Wallet, CheckCircle2, Star, ArrowRight, Phone, Mail, MapPin, Lock, Zap, Users, BarChart3, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CookiePreferencesLink } from "@/components/CookiePreferencesLink";
 import { useState } from "react";
 import { csrfFetch } from "@/lib/queryClient";
 
@@ -386,6 +387,8 @@ export default function Landing() {
             <span>Privacy Policy</span>
             <span>·</span>
             <span>Terms</span>
+            <span>·</span>
+            <CookiePreferencesLink className="hover:text-white transition-colors underline-offset-4 hover:underline" />
             <span>·</span>
             <Link href="/login" className="text-blue-500 hover:text-blue-400">Staff Login</Link>
           </div>

@@ -211,7 +211,9 @@ authRouter.post("/auth/admin/users/:id/approve", requireAdmin, async (req: Reque
   try {
     const administratorId = req.session.userId;
     if (!administratorId) return res.status(401).json({ message: "Authentication required" });
-    const user = await storage.getUser(req.params.id);
+    const userId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    if (!userId) return res.status(400).json({ message: "User ID is required" });
+    const user = await storage.getUser(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
     await setUserAccess(user.id, "approved", administratorId);
     const access = await getUserAccess(user.id);
@@ -226,7 +228,9 @@ authRouter.post("/auth/admin/users/:id/reject", requireAdmin, async (req: Reques
   try {
     const administratorId = req.session.userId;
     if (!administratorId) return res.status(401).json({ message: "Authentication required" });
-    const user = await storage.getUser(req.params.id);
+    const userId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    if (!userId) return res.status(400).json({ message: "User ID is required" });
+    const user = await storage.getUser(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
     if (isAdminUser(user)) return res.status(400).json({ message: "Administrator accounts cannot be rejected here" });
     await setUserAccess(user.id, "rejected", administratorId);

@@ -202,6 +202,11 @@ export async function listDocumentRoomItems() {
   return db.select().from(documentRoomItems).orderBy(desc(documentRoomItems.updatedAt));
 }
 
+export async function getDocumentRoomItem(id: string) {
+  const [item] = await db.select().from(documentRoomItems).where(eq(documentRoomItems.id, id));
+  return item;
+}
+
 export async function createDocumentRoomItem(values: InsertDocumentRoomItem, actor: Actor, options?: Confirmable) {
   return auditedCreate("document_room_item", "DocumentRoomItemCreated", values, async () => {
     const [created] = await db.insert(documentRoomItems).values(values).returning();
@@ -215,6 +220,51 @@ export async function updateDocumentRoomItem(id: string, values: Partial<InsertD
     const [updated] = await db.update(documentRoomItems).set({ ...values, updatedAt: new Date() }).where(eq(documentRoomItems.id, id)).returning();
     return updated;
   }, actor, options);
+}
+
+export async function attachDocumentRoomFile(
+  id: string,
+  file: { sourceFileName: string; storageUrlOrPath: string },
+  actor: Actor,
+) {
+  const before = await getDocumentRoomItem(id);
+  const item = await auditedUpdate(
+    "document_room_item",
+    "DocumentRoomFileAttached",
+    before,
+    file,
+    async () => {
+      const [updated] = await db
+        .update(documentRoomItems)
+        .set({ ...file, updatedAt: new Date() })
+        .where(eq(documentRoomItems.id, id))
+        .returning();
+      return updated;
+    },
+    actor,
+  );
+
+  return { item, previousStorageUrlOrPath: before.storageUrlOrPath };
+}
+
+export async function auditDocumentRoomFileDownload(id: string, actor: Actor) {
+  const item = await getDocumentRoomItem(id);
+  if (!item) {
+    const error = new Error("Document room item not found");
+    (error as any).status = 404;
+    throw error;
+  }
+
+  await recordAudit({
+    actorUserId: actor.userId || null,
+    action: "DocumentRoomFileDownloaded",
+    entityType: "document_room_item",
+    entityId: id,
+    beforeValue: null,
+    afterValue: { sourceFileName: item.sourceFileName },
+    relatedDocumentId: id,
+    highRisk: false,
+  });
 }
 
 export async function listLegalInstruments() {

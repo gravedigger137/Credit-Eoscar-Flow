@@ -56,7 +56,7 @@ The platform organizes truthful records and workflows for:
 - `shared/schema.ts`: Drizzle schema and shared types
 - `db/migrations`: database migrations
 - `docs`: production, staging, due-diligence, infrastructure, operations, and security docs
-- `uploads`: local development upload storage; production must use durable storage or persistent volume
+- `PRIVATE_UPLOAD_DIR` (defaults to `uploads`): private file storage directory. Local Docker Compose mounts `/app/uploads` as a named volume. Production must use a mounted persistent volume; for Render, mount a disk at `/var/data` and set `PRIVATE_UPLOAD_DIR=/var/data/uploads`.
 
 ## Security
 

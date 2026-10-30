@@ -1,0 +1,1 @@
+Arcadia Dev controlled GitHub integration test for Credit-Eoscar-Flow.

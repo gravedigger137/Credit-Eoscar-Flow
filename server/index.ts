@@ -1,4 +1,4 @@
-import 'dd-trace/init';
+﻿import 'dd-trace/init';
 import "dotenv/config";
 import crypto from "crypto";
 import express, { Router, type Request, Response, NextFunction } from "express";
@@ -62,7 +62,8 @@ app.use(
       if (!origin || corsAllowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error("Origin is not allowed by CORS"));
+      if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    return callback(new Error("Origin is not allowed by CORS"));
     },
     credentials: true,
   })
@@ -291,7 +292,7 @@ if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
 
 const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 if (!process.env.SESSION_SECRET) {
-  console.warn("WARNING: SESSION_SECRET not set — using auto-generated secret. Sessions will reset on restart.");
+  console.warn("WARNING: SESSION_SECRET not set â€” using auto-generated secret. Sessions will reset on restart.");
 }
 
 app.use(

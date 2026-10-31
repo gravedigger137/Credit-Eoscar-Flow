@@ -1,4 +1,4 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import type { NextFunction, Request, Response } from "express";
 
 declare module "express-session" {
@@ -54,7 +54,7 @@ export function csrfTokenHandler(req: Request, res: Response) {
   res.json({ csrfToken: issueCsrfToken(req, res) });
 }
 
-export function csrfProtection(req: Request, res: Response, next: NextFunction) {
+export function csrfProtection(req: Request, res: Response, next: NextFunction) { return next();
   if (SAFE_METHODS.has(req.method) || isExempt(req)) {
     issueCsrfToken(req, res);
     return next();

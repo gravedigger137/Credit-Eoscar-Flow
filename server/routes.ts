@@ -61,6 +61,8 @@ import { ZodError } from "zod";
 import { initializeOnboarding, advanceOnboarding, autoOnboardFromBooking, ONBOARDING_STEPS } from "./onboarding-engine";
 import { createLinkToken, exchangePublicToken, getAccounts, getTransactions, getLiabilities, isPlaidConfigured } from "./plaid-client";
 import {
+  attachDocumentRoomFile,
+  auditDocumentRoomFileDownload,
   createCollateralAsset,
   createDocumentRoomItem,
   createEquityBonusRecord,
@@ -68,6 +70,7 @@ import {
   createLegalInstrument,
   createReceivableReadinessRecord,
   getDocumentRoomSummary,
+  getDocumentRoomItem,
   highRiskConfirmationText,
   listAuditEvents,
   listCollateralAssets,
@@ -104,7 +107,7 @@ import { dwollaAdminRouter, dwollaRouter } from "./institutional-exchange/connec
 
 const execFileAsync = promisify(execFile);
 
-const uploadsDir = path.resolve(process.cwd(), "uploads");
+const uploadsDir = path.resolve(process.env.PRIVATE_UPLOAD_DIR || path.join(process.cwd(), "uploads"));
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const uploadMaxBytes = Number(process.env.UPLOAD_MAX_BYTES || 25 * 1024 * 1024);
@@ -336,6 +339,66 @@ export async function registerRoutes(httpServer: Server, app: Router): Promise<S
       const item = await createDocumentRoomItem(parsed, getActor(req), getConfirmable(req));
       res.status(201).json(item);
     } catch (err) { handleError(res, err); }
+  });
+
+  app.post(
+    "/document-room/items/:id/file",
+    rateLimit("upload", (req) => [req.session?.userId || req.ip || "unknown", "document-room-files"]),
+    upload.single("file"),
+    async (req, res) => {
+      const file = req.file;
+      try {
+        if (!file) return res.status(400).json({ message: "Choose a file to upload." });
+        await validateUploadedFile(file);
+
+        const { item, previousStorageUrlOrPath } = await attachDocumentRoomFile(
+          getRouteParam(req.params.id),
+          { sourceFileName: file.originalname, storageUrlOrPath: file.filename },
+          getActor(req),
+        );
+
+        if (previousStorageUrlOrPath && previousStorageUrlOrPath !== file.filename) {
+          try {
+            const previousPath = getStoredUploadPath(previousStorageUrlOrPath);
+            if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
+          } catch {
+            // Keep the successful attachment even if an orphaned prior file cannot be removed.
+          }
+        }
+
+        res.status(200).json(item);
+      } catch (err) {
+        if (file && fs.existsSync(file.path)) {
+          try {
+            const currentItem = await getDocumentRoomItem(getRouteParam(req.params.id));
+            if (currentItem?.storageUrlOrPath !== file.filename) fs.unlinkSync(file.path);
+          } catch {
+            try { fs.unlinkSync(file.path); } catch {}
+          }
+        }
+        handleError(res, err);
+      }
+    },
+  );
+
+  app.get("/document-room/items/:id/file", async (req, res) => {
+    try {
+      const item = await getDocumentRoomItem(getRouteParam(req.params.id));
+      if (!item?.sourceFileName || !item.storageUrlOrPath) {
+        return res.status(404).json({ message: "No file is attached to this document room item." });
+      }
+
+      const filePath = getStoredUploadPath(item.storageUrlOrPath);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ message: "The attached file is not available in private storage." });
+
+      await auditDocumentRoomFileDownload(item.id, getActor(req));
+      res.setHeader("Content-Disposition", `attachment; filename="${safeDownloadName(item.sourceFileName)}"`);
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      fs.createReadStream(filePath).pipe(res);
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/document-room/items/:id", async (req, res) => {

@@ -112,12 +112,19 @@ export default function LoginPage() {
 
   useEffect(() => {
     fetch("/api/auth/has-users")
-      .then(r => r.json())
-      .then(data => {
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || typeof data.hasUsers !== "boolean") {
+          throw new Error(data.message || "Unable to check account setup. Please try again.");
+        }
         setIsFirstUser(!data.hasUsers);
-        setCheckingUsers(false);
       })
-      .catch(() => setCheckingUsers(false));
+      .catch((err: unknown) => {
+        // Fail closed: a failed status check must never display first-admin registration.
+        setIsFirstUser(false);
+        setError(err instanceof Error ? err.message : "Unable to check account setup. Please try again.");
+      })
+      .finally(() => setCheckingUsers(false));
   }, []);
 
   async function handleLogin(e: React.FormEvent) {

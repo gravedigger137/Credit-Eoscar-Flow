@@ -193,7 +193,12 @@ authRouter.get("/auth/has-users", async (_req: Request, res: Response) => {
     const allUsers = await storage.getUsers();
     res.json({ hasUsers: allUsers.length > 0 });
   } catch {
-    res.json({ hasUsers: false });
+    // Do not turn a database failure into "no users"; that can expose first-admin setup.
+    res.status(503).json({
+      hasUsers: null,
+      code: "SETUP_STATUS_UNAVAILABLE",
+      message: "Account setup status is temporarily unavailable.",
+    });
   }
 });
 
